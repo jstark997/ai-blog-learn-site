@@ -12,7 +12,13 @@ import { once } from "node:events";
 import { createServer } from "node:net";
 
 /** @type {{ path: string; status: number; description: string }[]} */
-const ASSERTIONS = [{ path: "/", status: 200, description: "homepage" }];
+const ASSERTIONS = [
+  { path: "/", status: 200, description: "homepage" },
+  { path: "/blog", status: 200, description: "blog index" },
+  { path: "/learn", status: 200, description: "learn index" },
+  { path: "/about", status: 200, description: "about page" },
+  { path: "/no-such-page", status: 404, description: "custom 404" },
+];
 
 const SKIP_BUILD = process.env.VERIFY_SKIP_BUILD === "true";
 const STARTUP_TIMEOUT_MS = 60_000;
