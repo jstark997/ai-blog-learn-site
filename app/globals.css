@@ -1,26 +1,108 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+/* ---------------------------------------------------------------------------
+   Theme strategy (application spec §19)
+   ---------------------------------------------------------------------------
+   Colour tokens are declared once with `light-dark()`, so which half applies is
+   decided by the `color-scheme` property. `:root` opts into `light dark`, which
+   means the system preference wins by default; a `class="dark"` (or `"light"`)
+   on <html> pins `color-scheme` and overrides it. No token is declared twice.
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+   Consequences the later phases depend on:
+   - Shiki's dual theme (phase 3) selects with the same mechanism.
+   - `dark:` utilities are reserved for the cases a token swap cannot express;
+     the custom variant below keeps them in step with both mechanisms.
+--------------------------------------------------------------------------- */
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@custom-variant dark {
+  @media (prefers-color-scheme: dark) {
+    &:where(:not(.light, .light *)) {
+      @slot;
+    }
+  }
+  &:where(.dark, .dark *) {
+    @slot;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@theme {
+  /* Typefaces — the variables are set by next/font in app/layout.tsx. */
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SF Mono", Menlo, monospace;
+
+  /* Type scale, tuned for long-form technical reading: a 17px body size and
+     generous leading on the sizes that carry prose, tighter leading on the
+     sizes that carry headings. */
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.5;
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: 1.6;
+  --text-base: 1.0625rem;
+  --text-base--line-height: 1.75;
+  --text-lg: 1.1875rem;
+  --text-lg--line-height: 1.7;
+  --text-xl: 1.375rem;
+  --text-xl--line-height: 1.5;
+  --text-2xl: 1.6875rem;
+  --text-2xl--line-height: 1.35;
+  --text-3xl: 2.0625rem;
+  --text-3xl--line-height: 1.25;
+  --text-4xl: 2.5rem;
+  --text-4xl--line-height: 1.15;
+  --text-5xl: 3.125rem;
+  --text-5xl--line-height: 1.05;
+
+  /* Spacing. `--spacing` is the step every numeric utility multiplies, kept at
+     the 0.25rem default; `gutter` is the horizontal page inset, so the header,
+     the footer and every page share one value. */
+  --spacing: 0.25rem;
+  --spacing-gutter: 1.5rem;
+
+  /* Measure. `measure` is the reading column, `wide` the page frame. Tailwind's
+     built-in `max-w-prose` is a fixed 65ch and is not theme-driven, so the
+     reading column gets a token of its own. */
+  --container-measure: 68ch;
+  --container-wide: 72rem;
+
+  /* Colour. Light value first, dark value second. */
+  --color-canvas: light-dark(oklch(99% 0.003 255), oklch(17.5% 0.012 260));
+  --color-surface: light-dark(oklch(96.5% 0.005 255), oklch(21.5% 0.014 260));
+  --color-ink: light-dark(oklch(24% 0.018 260), oklch(93% 0.008 260));
+  --color-muted: light-dark(oklch(48% 0.018 260), oklch(72% 0.014 260));
+  --color-rule: light-dark(oklch(89% 0.008 260), oklch(30% 0.014 260));
+  --color-accent: light-dark(oklch(50% 0.155 258), oklch(80% 0.11 250));
+  --color-accent-soft: light-dark(oklch(95.5% 0.025 258), oklch(27% 0.045 258));
+  --color-on-accent: light-dark(oklch(99% 0.003 255), oklch(17.5% 0.012 260));
+}
+
+@layer base {
+  :root {
+    color-scheme: light dark;
+  }
+
+  /* An explicit choice on <html> pins the scheme and wins over the system
+     preference. Nothing writes these classes yet; the theme toggle, if the
+     author wants one, is a later phase. */
+  :root.light {
+    color-scheme: light;
+  }
+
+  :root.dark {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+  }
+
+  /* One visible focus ring for the whole site (spec §28). */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background-color: var(--color-accent-soft);
+  }
 }

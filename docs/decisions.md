@@ -351,3 +351,108 @@ stops the server in a `finally` block with `SIGTERM` then `SIGKILL`.
 **Consequences:** Later phases extend one `ASSERTIONS` array — blog and learn
 routes, 404s, draft gating, sitemap, feed — instead of restructuring the
 script. Concurrent runs cannot collide on a port.
+
+---
+
+## 2026-09-09 — Colour tokens are declared once with `light-dark()`
+
+**Context:** Spec §19 requires `prefers-color-scheme` plus a `class="dark"`
+override on `<html>`. The usual expression of that is every token written
+twice — once under `@media (prefers-color-scheme: dark)` and again under the
+class selector — which is where palettes drift out of sync.
+
+**Decision:** Each token is declared once in `@theme` as
+`light-dark(<light>, <dark>)`. `:root` sets `color-scheme: light dark`, so the
+system preference decides; `:root.dark` and `:root.light` pin `color-scheme`
+and override it. Tailwind's `dark:` variant is redefined with
+`@custom-variant` to match both mechanisms, for the rare case a token swap
+cannot express.
+
+**Alternatives:** Duplicated `@media` and `.dark` palette blocks (two places to
+edit per colour); a `data-theme` attribute (no advantage over the class the
+spec already names).
+
+**Consequences:** Adding a colour means one line. Lightning CSS compiles
+`light-dark()` down to a `--lightningcss-light`/`--lightningcss-dark` variable
+pair and emits the matching `:root.light` / `:root.dark` overrides itself, so
+the mechanism works regardless of browser support for the function; verified in
+the built stylesheet and in a browser for all three states. Phase 3 should
+select Shiki's dual theme the same way rather than adding a second mechanism.
+
+No theme toggle exists yet — nothing writes those classes. Phase 2 was not
+asked for one, and a toggle needs a blocking inline script to avoid a flash of
+the wrong theme. If the author wants one, that is its own decision.
+
+---
+
+## 2026-09-09 — The reading measure is `--container-measure`, not `max-w-prose`
+
+**Context:** Tailwind 4's built-in `max-w-prose` is a hard-coded `65ch` and is
+not driven by a theme variable, so defining `--container-prose` in `@theme`
+changed nothing — confirmed by grepping the built stylesheet.
+
+**Decision:** The reading column is `--container-measure: 68ch`, used through
+`max-w-measure` and exposed as `<Container width="prose">`.
+
+**Consequences:** One token controls article width for phases 6 and 8. Do not
+reach for `max-w-prose`; it silently ignores the theme.
+
+---
+
+## 2026-09-09 — Shell composition, and where the client boundary sits
+
+**Context:** The shell needs the current pathname for `aria-current` and needs
+state for the mobile menu, both of which are client-only concerns.
+
+**Decision:** `components/layout/` holds `SiteHeader`, `SiteFooter` and
+`Container`; `components/navigation/` holds `MainNav`, `MobileNav`, `NavLink`
+and `nav-links.ts`. Files are PascalCase for components and kebab-case for
+plain modules, with named exports throughout. Only `NavLink` and `MobileNav`
+carry `"use client"` — the header, the footer and every page stay server
+components.
+
+The four navigation entries and the `isActivePath` rule live in
+`nav-links.ts`, so the desktop and mobile menus cannot drift, and the active
+rule is unit-testable without React. `/` matches exactly; every other entry
+also matches its descendants, so an article marks its section as current.
+
+Mobile navigation is a disclosure — a button owning a panel via
+`aria-controls`/`aria-expanded` — not a drawer or a modal dialog. The panel
+stays mounted and is hidden with the `hidden` attribute, so its links leave the
+tab order; Escape closes it and returns focus to the button; choosing a link
+closes it, because client-side navigation leaves the panel mounted. Spec §22
+asks for the simplest accessible implementation.
+
+**Consequences:** Phase 9's lesson navigation should follow the same shape.
+Adding a nav entry is a one-line change in `nav-links.ts`.
+
+---
+
+## 2026-09-09 — Site copy lives in `lib/site.ts`
+
+**Context:** Spec §8.1 requires the site's own words to be configurable rather
+than embedded throughout the application.
+
+**Decision:** `lib/site.ts` exports one `site` object — name, description,
+section descriptions, author — consumed by the header, the footer, the page
+metadata and the placeholder pages.
+
+**Consequences:** The site name and every description are placeholders written
+by an agent (spec §3.1) and are marked as such in the file. The author replaces
+them; nothing else has to change. Phase 16 adds the canonical URL from
+`NEXT_PUBLIC_SITE_URL` — put it here.
+
+---
+
+## 2026-09-09 — Testing Library cleanup is registered explicitly
+
+**Context:** Vitest runs without globals (`describe`/`it` are imported), so
+Testing Library cannot detect an `afterEach` to register its automatic cleanup.
+Renders accumulated across tests within a file, and role queries found
+duplicate elements.
+
+**Decision:** `tests/setup.ts` calls `afterEach(cleanup)` explicitly.
+
+**Consequences:** Component tests in later phases get a clean DOM without
+repeating the hook. Do not enable Vitest globals to fix this — the explicit
+imports are the clearer convention.
