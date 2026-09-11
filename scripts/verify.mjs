@@ -18,6 +18,8 @@ const ASSERTIONS = [
   { path: "/learn", status: 200, description: "learn index" },
   { path: "/about", status: 200, description: "about page" },
   { path: "/no-such-page", status: 404, description: "custom 404" },
+  // TEMPORARY, phase 3: goes when app/mdx-pipeline-check/ does (phase 6).
+  { path: "/mdx-pipeline-check", status: 200, description: "MDX pipeline check" },
 ];
 
 const SKIP_BUILD = process.env.VERIFY_SKIP_BUILD === "true";
