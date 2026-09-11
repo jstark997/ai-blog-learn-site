@@ -613,3 +613,183 @@ unsupported upstream; its README points at `next-mdx-remote-client`,
 package is a build-time compiler over content this repository owns, and it is
 used behind one function. If it has to be replaced, `lib/content/mdx.ts` is the
 only file that changes. Flagged for the author.
+
+---
+
+## 2026-09-10 — Zod resolved version, pinned to the 4.5 line with `~`
+
+**Context:** Spec §4.7 pins `zod 4.5.x`. The current release is 4.6.2, so a
+caret range would quietly move off the pinned line on the next clean install.
+
+**Decision:** `"zod": "~4.5.4"` in `package.json`; resolved 4.5.4. The same
+reasoning already applies to `typescript` (`~5.9.3`); the other dependencies
+carry `^` because their pinned line is also the newest published line.
+
+**Consequences:** Moving to Zod 4.6 becomes a deliberate edit. Re-check this
+when the spec's pins are next revised.
+
+---
+
+## 2026-09-10 — `validate-content.mjs` imports the TypeScript schemas directly
+
+**Context:** The schemas must have exactly one definition: the application
+imports `lib/content/schemas.ts` through the Next.js build, and the plan puts
+the eager validator in `scripts/validate-content.mjs`, which Node runs itself.
+A `.mjs` script cannot import a `.ts` module without help.
+
+**Decision:** The script imports the TypeScript modules through Node's native
+type stripping. Node strips types unflagged from v23.6; the script asks
+`process.features.typescript` (documented since v22.10) and, when the answer is
+falsy, re-execs itself once with `--experimental-strip-types`. The TypeScript
+modules are therefore imported dynamically, after that guard, because static
+imports are resolved before any statement runs.
+
+**Alternatives:** Pinning `--experimental-strip-types` in the `package.json`
+script — rejected, a flag a future Node may reject, and the runtime that needs
+it is the older one. Adding `tsx`, `ts-node` or a build step for one script —
+rejected, a dependency and a compile stage for a file that runs in a second.
+Duplicating the schemas in JavaScript — rejected outright; two definitions of
+frontmatter is precisely the bug this phase exists to prevent.
+
+**Consequences:** `lib/content/schemas.ts` and `lib/content/validate.ts` must
+stay importable by bare Node: no path aliases (`@/…`), no JSX, and only erasable
+TypeScript — no `enum`, no `namespace`, no parameter properties. Anything they
+import must resolve as an ordinary package. Later phases may add files to
+`lib/content/` freely; only what the script imports carries this constraint,
+and `lib/content/topics.ts` will be the next one.
+
+---
+
+## 2026-09-10 — Frontmatter is strict: an unknown field is an error
+
+**Context:** Zod strips unknown keys by default. Under that default a misspelt
+`drafts: true` publishes an unfinished post, in silence — the failure mode this
+project can least afford, and one no test would catch.
+
+**Decision:** Both schemas are `z.strictObject`. An unrecognised key fails
+validation and is named in the error. Spec §10 lists `featured`,
+`canonicalUrl` and `coverImage` as possible future fields; a future field is
+added to the schema first, which is a one-line change.
+
+**Alternatives:** Passthrough or stripping, either of which trades a silent
+draft leak for the convenience of undeclared fields.
+
+**Consequences:** Content cannot carry private notes in frontmatter. If an
+author wants scratch metadata, it belongs in prose or in a field the schema
+declares.
+
+---
+
+## 2026-09-10 — What the schemas enforce beyond the specification's sketch
+
+**Context:** Spec §10 and §12 give the field lists; a few details were left to
+the implementation.
+
+**Decision:**
+
+- `order` is a positive integer. Sparse multiples of ten are the *convention*
+  (spec §13) and the reason for it — inserting a lesson without renumbering —
+  is defeated by enforcing it, so an author who deliberately writes 15 is
+  allowed. `validate:content` does reject a duplicate `order` within a topic,
+  which is the check that actually protects lesson ordering.
+- `tags` and `prerequisites` default to `[]`, so omitting them is legal and
+  every consumer receives an array.
+- `title` and `description` are trimmed and must be non-empty, so `title: ""`
+  fails rather than rendering a blank heading.
+- A date is checked for the ISO shape *and* for existing: `Date.parse` accepts
+  `2026-02-30` and silently rolls it over to 2 March. The shape check carries
+  `abort: true` so a malformed date produces one line of explanation, not two.
+- A prerequisite must look like `<topic-id>/<lesson-id>`, lowercase and
+  hyphenated, matching the URL rules in spec §26.
+
+**Consequences:** The error messages name the field and the expectation, as
+spec §18 requires, and read as instructions to an author rather than as Zod
+internals.
+
+---
+
+## 2026-09-10 — The content tree's shape is validated, not assumed
+
+**Context:** Discovery in phases 5 and 7 will read `content/blog/*.mdx` and
+`content/learn/<topic>/<lesson>.mdx`. A file outside those shapes is not a
+build error — it is simply never read, which is the silent failure spec §18
+forbids.
+
+**Decision:** `validate:content` walks the tree and reports anything the
+utilities will not see: a subdirectory under `content/blog/` (a post there has
+no route), an `.mdx` file directly under `content/learn/` (a lesson needs a
+topic directory), a directory nested below a topic, and — as a warning — any
+non-`.mdx` file. Names beginning with `_` or `.` are skipped as scaffolding,
+which is what keeps `content/_pipeline-check.mdx` and `.gitkeep` out of the
+report.
+
+**Consequences:** Blog posts stay flat and lessons stay exactly two levels
+deep, enforced rather than remembered. A dated archive layout such as
+`content/blog/2026/` would need this rule revisited first.
+
+---
+
+## 2026-09-10 — Cross-file clashes involving a draft warn rather than fail
+
+**Context:** Spec §18 sets severity by draft status for *per-file* validation
+and is silent about the cross-file checks. A duplicate `order` shared by a
+published lesson and a half-finished draft would otherwise fail the production
+build — where the draft does not exist at all.
+
+**Decision:** A clash — duplicate `order`, duplicate blog slug — is an error
+only when every file involved is published; if any is a draft it warns. An
+unresolvable or draft prerequisite takes its severity from the lesson that
+declares it, so a published lesson may not depend on a draft.
+
+**Consequences:** Drafts stay cheap. The checks still fail the build for
+anything a reader could actually reach.
+
+---
+
+## 2026-09-10 — Validation lives in `lib/content/validate.ts`, shared by both callers
+
+**Context:** Validation happens twice (spec §4.4): lazily, as the build reads a
+file, and eagerly, in `validate:content`. Implementing the severity rule and
+the error formatting in each would let them drift, and the eager one would be
+the one nobody notices is wrong.
+
+**Decision:** A third module beside the schemas. `checkFrontmatter` classifies
+a failure without acting on it; `parseFrontmatter` is the lazy wrapper that
+throws for published content and warns-and-returns-`null` for a draft — the
+function phases 5 and 7 call; `crossFileIssues` is a pure function over already
+parsed records, so the cross-file rules are unit-tested directly rather than
+only through a subprocess. The script contributes the filesystem walk, the
+report and the exit code, and nothing else.
+
+**Consequences:** Content utilities call `parseFrontmatter` and inherit correct
+severity for free. `scripts/validate-content.mjs` takes an optional content
+root, which is how the end-to-end test hands it a tree of its own.
+
+---
+
+## 2026-09-10 — `showDrafts` also honours `SHOW_DRAFTS=false`
+
+**Context:** Spec §16 gives the helper as code in which `SHOW_DRAFTS` can only
+turn drafts *on*. The same section's table says a local production build shows
+drafts "unless `SHOW_DRAFTS=false`", and the committed `.env.example` documents
+that value — under the literal code, setting it has no effect anywhere.
+
+**Decision:** The environment rule is the specification's; `SHOW_DRAFTS` is
+read as an explicit override in both directions, so `false` hides drafts
+wherever it is set. With the variable unset, behaviour is exactly the
+specification's code.
+
+**Alternatives:** Implementing the snippet verbatim and leaving `.env.example`
+describing a switch that does nothing.
+
+**Consequences:** The override can only ever hide more, never leak more, so the
+production guarantee is unaffected. The remaining discrepancy is reported, not
+resolved here: spec §16's table also claims a *local* production build shows
+drafts by default, which its own code contradicts — locally, `NODE_ENV` is
+`production` and `VERCEL_ENV` is unset, so drafts are hidden. The implementation
+follows the code; `SHOW_DRAFTS=true` is the way to preview drafts in a local
+production build.
+
+**Note on testing:** `showDrafts` is a module-level constant, as specified, so a
+test that needs a different environment must `vi.resetModules()` and re-import
+the module. `tests/env.test.ts` shows the pattern for phases 5, 7 and 15.
