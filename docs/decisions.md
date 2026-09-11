@@ -793,3 +793,22 @@ production build.
 **Note on testing:** `showDrafts` is a module-level constant, as specified, so a
 test that needs a different environment must `vi.resetModules()` and re-import
 the module. `tests/env.test.ts` shows the pattern for phases 5, 7 and 15.
+
+---
+
+## 2026-09-11 — Strict frontmatter accepted by the author, with a revisit trigger
+
+**Context:** The strict-object decision of 2026-09-10 was left for the author to
+confirm, because the cost lands on them: no undeclared field, no scratch
+metadata, and a Markdown editor that stamps its own keys would fail the build.
+
+**Decision:** Accepted as it stands. The asymmetry holds — a stripped unknown
+key means `drafts: true` publishes an unfinished post with no error anywhere,
+while a strict failure is loud, immediate and names the key.
+
+**Revisit when:** frontmatter starts being written by something other than the
+author in this repository — a non-technical contributor, or an editor that
+injects its own keys. The middle ground then is to keep the strict schema and
+declare one ignored `meta:` mapping as an escape hatch, rather than to relax to
+passthrough with a warning; a warning that does not block is a warning nobody
+reads.
