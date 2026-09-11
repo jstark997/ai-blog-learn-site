@@ -106,3 +106,207 @@
     background-color: var(--color-accent-soft);
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Rendered MDX (application spec §19, §20, §27)
+   ---------------------------------------------------------------------------
+   `.prose` styles the HTML the MDX pipeline emits — the elements no React
+   component intercepts. The registry components of phase 10 override
+   individual tags; everything else lands here.
+
+   Code blocks and mathematics are the parts this phase owns:
+
+   - Shiki runs at build time with a dual theme, writing `--shiki-light` and
+     `--shiki-dark` on every token. `light-dark()` chooses between them from
+     `color-scheme`, the same mechanism the colour tokens above use, so a
+     change of theme re-highlights nothing and ships no JavaScript.
+   - Long lines and wide equations scroll inside their own box rather than
+     widening the reading column.
+--------------------------------------------------------------------------- */
+
+@layer components {
+  .prose {
+    color: var(--color-ink);
+    text-wrap: pretty;
+  }
+
+  .prose > * + * {
+    margin-block-start: --spacing(6);
+  }
+
+  .prose h1 {
+    font-size: var(--text-4xl);
+    line-height: var(--text-4xl--line-height);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+
+  .prose h2 {
+    font-size: var(--text-2xl);
+    line-height: var(--text-2xl--line-height);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
+  }
+
+  .prose h3 {
+    font-size: var(--text-xl);
+    line-height: var(--text-xl--line-height);
+    font-weight: 600;
+  }
+
+  .prose h4 {
+    font-size: var(--text-lg);
+    line-height: var(--text-lg--line-height);
+    font-weight: 600;
+  }
+
+  .prose :is(h2, h3, h4) {
+    margin-block-start: --spacing(12);
+  }
+
+  .prose :is(h2, h3, h4) + * {
+    margin-block-start: --spacing(4);
+  }
+
+  .prose a {
+    color: var(--color-accent);
+    text-decoration-line: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.2em;
+  }
+
+  .prose :is(ul, ol) {
+    padding-inline-start: --spacing(6);
+  }
+
+  .prose ul {
+    list-style-type: disc;
+  }
+
+  .prose ol {
+    list-style-type: decimal;
+  }
+
+  .prose li::marker {
+    color: var(--color-muted);
+  }
+
+  .prose li + li,
+  .prose li > :is(ul, ol) {
+    margin-block-start: --spacing(2);
+  }
+
+  /* GFM task lists: the checkbox replaces the marker. */
+  .prose li:has(> input[type="checkbox"]) {
+    list-style-type: none;
+  }
+
+  .prose input[type="checkbox"] {
+    margin-inline-end: --spacing(2);
+    accent-color: var(--color-accent);
+  }
+
+  .prose blockquote {
+    border-inline-start: 2px solid var(--color-accent);
+    padding-inline-start: --spacing(5);
+    color: var(--color-muted);
+    font-style: italic;
+  }
+
+  .prose blockquote > * + * {
+    margin-block-start: --spacing(4);
+  }
+
+  .prose hr {
+    border-color: var(--color-rule);
+  }
+
+  /* The table stays a table: `display: block` would make it scroll, but it
+     also drops the table role in some screen readers. A wide table wraps
+     inside its cells for now; the scrollable wrapper that keeps both the
+     semantics and the scrolling belongs to the `table` override in the prose
+     registry (phase 10). */
+  .prose table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--text-sm);
+  }
+
+  .prose :is(th, td) {
+    border: 1px solid var(--color-rule);
+    padding: --spacing(2) --spacing(3);
+    text-align: start;
+  }
+
+  .prose th {
+    background-color: var(--color-surface);
+    font-weight: 600;
+  }
+
+  /* Inline code, excluding the contents of a highlighted block. */
+  .prose :not(pre) > code {
+    border-radius: 0.25rem;
+    background-color: var(--color-surface);
+    padding: 0.15em 0.35em;
+    font-family: var(--font-mono);
+    font-size: 0.9em;
+  }
+
+  /* --- Shiki ------------------------------------------------------------ */
+
+  .prose figure[data-rehype-pretty-code-figure] {
+    border: 1px solid var(--color-rule);
+    border-radius: 0.5rem;
+    background-color: var(--color-surface);
+    overflow: hidden;
+  }
+
+  .prose [data-rehype-pretty-code-title] {
+    border-block-end: 1px solid var(--color-rule);
+    padding: --spacing(2) --spacing(4);
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--color-muted);
+  }
+
+  .prose pre {
+    overflow-x: auto;
+    padding-block: --spacing(4);
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    line-height: 1.65;
+    color: var(--color-ink);
+    tab-size: 2;
+  }
+
+  /* rehype-pretty-code lays the lines out as a grid, so a highlighted line can
+     span the full scrolled width rather than stopping at the viewport. */
+  .prose pre > code {
+    display: grid;
+    min-width: max-content;
+  }
+
+  .prose pre [data-line] {
+    padding-inline: --spacing(4);
+  }
+
+  .prose pre span {
+    color: light-dark(var(--shiki-light, currentColor), var(--shiki-dark, currentColor));
+    font-style: light-dark(var(--shiki-light-font-style, normal), var(--shiki-dark-font-style, normal));
+    font-weight: light-dark(var(--shiki-light-font-weight, inherit), var(--shiki-dark-font-weight, inherit));
+    text-decoration: light-dark(
+      var(--shiki-light-text-decoration, none),
+      var(--shiki-dark-text-decoration, none)
+    );
+  }
+
+  /* --- KaTeX ------------------------------------------------------------ */
+
+  .prose .katex-display {
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-block: --spacing(2);
+  }
+}

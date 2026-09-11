@@ -4,6 +4,10 @@ import { Geist, Geist_Mono } from "next/font/google";
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { SiteHeader } from "@/components/layout/SiteHeader";
 import { site } from "@/lib/site";
+
+// KaTeX typesets the mathematics at build time; this is the stylesheet its
+// output needs. Imported once, here, for the whole site (spec §20).
+import "katex/dist/katex.min.css";
 import "./globals.css";
 
 const geistSans = Geist({

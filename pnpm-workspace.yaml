@@ -1,3 +1,12 @@
 allowBuilds:
   sharp: false
   unrs-resolver: false
+
+# rehype-katex 7 declares `katex: ^0.16.0` as a plain dependency, so pnpm would
+# install a second, private copy of KaTeX 0.16 and render the mathematics with
+# it — while `app/layout.tsx` imports the stylesheet from the pinned 0.18 (spec
+# §4.7). KaTeX 0.18 prefixed nineteen generic internal class names (`.base` →
+# `.katex-base`, `.strut` → `.katex-strut`, and so on), so the two halves do not
+# match and every equation renders unstyled. One version for both.
+overrides:
+  katex: 0.18.7

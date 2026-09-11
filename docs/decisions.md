@@ -456,3 +456,160 @@ duplicate elements.
 **Consequences:** Component tests in later phases get a clean DOM without
 repeating the hook. Do not enable Vitest globals to fix this — the explicit
 imports are the clearer convention.
+
+---
+
+## 2026-09-10 — One MDX entry point, and what it does not return
+
+**Context:** Spec §4.3 decided the compilation strategy; what was still open is
+the shape of the function the rest of the site calls, and whether it also hands
+back frontmatter.
+
+**Decision:** `lib/content/mdx.ts` exports one function, `renderMdx({ source,
+components })`, returning a `ReactElement`. It wraps `compileMDX` from
+`next-mdx-remote/rsc` and is the only place the plugin chain is configured:
+`remark-gfm` and `remark-math` on the remark side, `rehype-katex` then
+`rehype-pretty-code` on the rehype side. `parseFrontmatter: true` strips
+frontmatter so it cannot render as a stray paragraph, but the parsed object is
+deliberately **not** returned.
+
+**Alternatives:** Returning `{ content, frontmatter }` — rejected because it
+offers pages a second, unvalidated route to metadata. Discovery reads
+frontmatter with `gray-matter` and validates it with Zod (phases 4–5); a page
+should never be able to reach around that.
+
+**Consequences:** Callers pass a body and a registry and get an element.
+Swapping a plugin touches one file. Content utilities own metadata entirely.
+
+---
+
+## 2026-09-10 — `blockJS` is turned off; `blockDangerousJS` stays on
+
+**Context:** `next-mdx-remote` 6.0.0 added two security options, both defaulting
+to `true`. `blockJS` strips every MDX expression — including JSX *attribute*
+expressions, so `<GradientDescentDemo learningRate={0.1} />` silently loses its
+props. The demos of phases 11 and 12 depend on exactly that.
+
+**Decision:** `blockJS: false`, `blockDangerousJS: true`.
+
+**Alternatives:** Leaving `blockJS` on and passing demo configuration as string
+attributes — rejected: it pushes parsing into every demo and the failure is
+silent, which is the worst property a content bug can have.
+
+**Consequences:** The defaults protect sites that render MDX submitted by
+strangers. This site's content is authored in this repository and reviewed in
+pull requests, so the threat model does not apply. If that ever changes —
+user-submitted or fetched MDX — this is the line to revisit first.
+
+---
+
+## 2026-09-10 — Shiki dual theme, selected by `light-dark()`
+
+**Context:** Spec §19 fixes the themes but not how the page chooses between
+them, and the shell (phase 2) already settled the site's theme mechanism.
+
+**Decision:** `theme: { light: "github-light", dark: "github-dark" }`, with
+`keepBackground: false` and `defaultLang: { block: "plaintext" }`. Shiki writes
+`--shiki-light` and `--shiki-dark` on every token; `app/globals.css` picks one
+with `light-dark()`, the same mechanism the colour tokens use, so the system
+preference and a `class="dark"` override both work and nothing re-highlights.
+
+**Alternatives:** A `.dark` descendant selector, as the rehype-pretty-code docs
+suggest — rejected: it handles the class but not `prefers-color-scheme`, so the
+code blocks would disagree with the rest of the page for a reader who has never
+touched a toggle. Keeping Shiki's own background — rejected: the blocks sit on
+the site's `surface` token instead, so a code block looks like part of the page.
+
+**Consequences:** Verified in the built stylesheet: Lightning CSS downlevels
+`light-dark()` to its `--lightningcss-light` / `--lightningcss-dark` pair,
+already emitted for `:root`, `prefers-color-scheme`, `:root.light` and
+`:root.dark`. `defaultLang` keeps an unknown language from producing an empty
+`data-language`; such a fence falls back to plain text rather than failing.
+
+---
+
+## 2026-09-10 — KaTeX is pinned to one version by a pnpm override
+
+**Context:** `rehype-katex@7.0.1` declares `katex: ^0.16.0` as an ordinary
+dependency, not a peer. pnpm's strict layout therefore gave it a private KaTeX
+0.16 to render with, while `app/layout.tsx` imported the stylesheet from the
+pinned 0.18 (spec §4.7). KaTeX 0.18 prefixed nineteen generic internal class
+names — `.base` → `.katex-base`, `.strut` → `.katex-strut`, and so on — so the
+markup and the stylesheet would not have matched and every equation would have
+rendered unstyled. Confirmed before the fix: two copies resolved, and 0.16's
+output used the unprefixed names.
+
+**Decision:** `overrides: { katex: 0.18.7 }` in `pnpm-workspace.yaml`, which is
+where pnpm 11 reads overrides — the `pnpm.overrides` key in `package.json` is
+ignored with a warning. `pnpm why katex` now reports one version, and
+`tests/mdx.test.tsx` asserts on `katex-base` so a regression fails the suite.
+
+**Alternatives:** Pinning `katex` to 0.16 to match the plugin — rejected, it
+contradicts the spec's pin. Importing the stylesheet from the nested copy —
+rejected as unmaintainable.
+
+**Consequences:** Any future dependency bump must keep one KaTeX. This is worth
+re-checking if `rehype-katex` ever widens its range.
+
+---
+
+## 2026-09-10 — Prose styling lives in `app/globals.css`
+
+**Context:** The pipeline emits ordinary HTML — headings, lists, tables,
+blockquotes — that no component intercepts. Nothing in the plan assigns that
+styling to a phase, and the code blocks this phase owns cannot be judged
+readable on an otherwise unstyled page.
+
+**Decision:** A `.prose` block in `app/globals.css`, in `@layer components`,
+styling the elements MDX produces, alongside the Shiki and KaTeX rules. No
+`@tailwindcss/typography`: the type scale and colour tokens already exist and
+the plugin would bring a second, competing one.
+
+**Alternatives:** Deferring to phase 6 — rejected, this phase's validation
+depends on it.
+
+**Consequences:** Phase 10's registry components override individual tags and
+inherit the rest. One thing is deliberately left undone: a wide table keeps its
+table semantics and wraps inside its cells rather than scrolling, because
+`display: block` on a `<table>` drops the table role in some screen readers.
+The scrollable wrapper belongs to a `table` override in the prose registry.
+
+---
+
+## 2026-09-10 — The pipeline check is a page now and a test forever
+
+**Context:** The plan asks for a throwaway MDX file rendered through a temporary
+route. A route a human can look at is the only way to judge "readable in both
+themes"; a route is also the only thing that disappears when the phase ends.
+
+**Decision:** Both. `content/_pipeline-check.mdx` and
+`app/mdx-pipeline-check/page.tsx` stay until phase 6 renders real posts, then
+both are deleted along with the `/mdx-pipeline-check` line in `scripts/verify.mjs`.
+The regression protection is `tests/mdx.test.tsx`, which compiles its own inline
+sources through `renderMdx` and asserts on the HTML — GFM, both kinds of maths,
+all six languages, unknown-language fallback, the component registry and JSX
+attribute expressions.
+
+**Alternatives:** Pointing the tests at the fixture file — rejected, the tests
+would break when the fixture is deleted.
+
+**Consequences:** The check file sits at the root of `content/`, not under
+`content/blog/` or `content/learn/`, so no content utility will ever discover
+it. Its leading underscore marks it as scaffolding.
+
+---
+
+## 2026-09-10 — Spec discrepancy: `next-mdx-remote` is archived upstream
+
+**Context:** Not a decision — a finding to record. Spec §4.3 fixes
+`next-mdx-remote/rsc` as the compilation strategy, and the pinned 6.0.0 works
+exactly as specified. The repository itself, however, is now archived and
+unsupported upstream; its README points at `next-mdx-remote-client`,
+`mdx-bundler`, or `@mdx-js/mdx` directly.
+
+**Decision:** Follow the specification. Nothing is changed in this phase.
+
+**Consequences:** No security patches will arrive. The exposure is small — the
+package is a build-time compiler over content this repository owns, and it is
+used behind one function. If it has to be replaced, `lib/content/mdx.ts` is the
+only file that changes. Flagged for the author.
