@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 
+import { PostCard } from "@/components/blog/PostCard";
 import { Container } from "@/components/layout/Container";
-import { PlaceholderNote } from "@/components/content/PlaceholderNote";
+import { getAllBlogPosts } from "@/lib/content/blog";
 import { site } from "@/lib/site";
 
 export const metadata: Metadata = {
@@ -9,15 +10,34 @@ export const metadata: Metadata = {
   description: site.blogDescription,
 };
 
-export default function BlogIndexPage() {
+/**
+ * The blog index (spec §9.1): every post `getAllBlogPosts` returns, newest
+ * first, generated from the filesystem. There is no hand-maintained listing,
+ * and no draft filtering here — the content utility has already applied it.
+ *
+ * An ordered list, because reverse-chronological order is part of the meaning.
+ */
+export default async function BlogIndexPage() {
+  const posts = await getAllBlogPosts();
+
   return (
-    <Container width="prose" className="flex flex-col gap-6">
-      <h1 className="text-3xl font-semibold tracking-tight">Blog</h1>
-      <p className="text-lg text-muted text-pretty">{site.blogDescription}</p>
-      <PlaceholderNote>
-        The blog index lists published posts from <code className="font-mono">content/blog/</code>{" "}
-        once the content pipeline (phase 3) and the blog routes (phase 6) exist.
-      </PlaceholderNote>
+    <Container width="prose" className="flex flex-col gap-10">
+      <header className="flex flex-col gap-4">
+        <h1 className="text-3xl font-semibold tracking-tight">Blog</h1>
+        <p className="text-lg text-muted text-pretty">{site.blogDescription}</p>
+      </header>
+
+      {posts.length === 0 ? (
+        <p className="text-muted">No posts published yet.</p>
+      ) : (
+        <ol className="divide-y divide-rule">
+          {posts.map((post) => (
+            <li key={post.slug} className="py-8 first:pt-0 last:pb-0">
+              <PostCard post={post} />
+            </li>
+          ))}
+        </ol>
+      )}
     </Container>
   );
 }
