@@ -915,3 +915,118 @@ disagree about what counts as a post.
 **Consequences:** Discovery and lookup stay consistent: anything
 `getAllBlogPosts()` can find, `getBlogPostBySlug()` can fetch. `dynamicParams =
 false` in phase 6 makes this belt-and-braces, which is the intent.
+
+---
+
+## 2026-09-11 — Content dates are formatted by one helper, in UTC, in a fixed locale
+
+**Context:** Frontmatter dates are `YYYY-MM-DD` calendar days. Two ways to
+render them go wrong: `new Date("2026-01-01")` formatted in a zone behind UTC
+prints 31 December, and a formatter with no explicit locale produces whatever
+the build machine's ICU defaults are, so the generated HTML changes without the
+content changing.
+
+**Decision:** `lib/utils/date.ts` exports `formatDate`, the only place a date
+becomes words. It reads the value as UTC midnight and formats it with a pinned
+`en-GB` long form — `4 September 2026` — matching the British spelling the
+project's documents already use. Every date is wrapped in a `<time dateTime>`
+element, so the machine-readable value travels with the readable one.
+
+**Alternatives:** Per-component `toLocaleDateString` calls, which is how the
+time-zone bug reaches production one component at a time. `Intl.RelativeTimeFormat`
+("3 days ago"), rejected: statically generated pages would age in place.
+
+**Consequences:** Changing the site's date style is a one-line change. The
+locale is not negotiated with the reader's browser, which is the point — these
+pages are static HTML, and there is no request to negotiate with.
+
+---
+
+## 2026-09-11 — Listing and article share one metadata component
+
+**Context:** Spec §9.1 and §9.2 ask for the same five fields — title,
+description, publication date, updated date, tags — in two places. Written
+twice, they drift.
+
+**Decision:** `components/blog/PostMeta.tsx` renders the dates and tags for both,
+and `components/blog/TagList.tsx` renders tags as plain labels rather than links,
+because Phase 1 has no tag pages (spec §35). `components/blog/PostCard.tsx` is the
+listing entry and takes `Pick<BlogPost, "slug" | "metadata">`, so a listing cannot
+accidentally reach for an MDX body it is not going to render.
+
+The `DRAFT` badge lives in `components/content/DraftBadge.tsx`, not under
+`components/blog/`: the learn routes need the same badge in phase 8. Its label is
+written in mixed case and uppercased with CSS so a screen reader announces
+"Draft" instead of spelling it.
+
+**Alternatives:** One `PostHeader` for both, rejected — the listing needs an
+`h2` inside a link and the article needs an `h1`; the shared part is the metadata
+row, and that is what is shared.
+
+**Consequences:** `updatedAt` is shown whenever the frontmatter carries one, even
+when it equals `publishedAt`, which is what the development plan asks for
+("updated date when present"). Suppressing the duplicate would be a content
+judgement, and the author can make it by removing the field.
+
+---
+
+## 2026-09-11 — A visible draft page is `noindex`, and canonical URLs wait for phase 16
+
+**Context:** Drafts are reachable on preview deployments (spec §16, §33). A
+preview URL is crawlable if anything links to it.
+
+**Decision:** `generateMetadata` on `/blog/[slug]` emits
+`robots: { index: false, follow: false }` for a draft. Everything else it emits
+is per-page: title, description, and Open Graph `article` metadata with the
+publication and modification dates. `metadataBase`, canonical URLs, the sitemap
+and the feed are deliberately absent — they all depend on `NEXT_PUBLIC_SITE_URL`
+and are phase 16's single concern (spec §25).
+
+**Consequences:** Phase 16 adds `alternates.canonical` to this route rather than
+restructuring its metadata.
+
+---
+
+## 2026-09-11 — `verify.mjs` derives its blog assertions from content, and reads frontmatter itself
+
+**Context:** Spec §54.1 wants *every* published post to return 200 and a known
+draft slug to 404. A hand-written list of slugs is wrong the moment the author
+renames a sample post.
+
+**Decision:** The script lists `content/blog/`, derives each slug from its
+filename and reads only the `draft` flag, with `gray-matter`. It then asserts
+200 for every published post, 404 for every draft, 404 for an unknown slug, and
+that the `/blog` body mentions no draft URL. It refuses to run — rather than
+passing vacuously — if the content tree has no published post or no draft.
+
+Both the build and the server run with `SHOW_DRAFTS=false`, so `pnpm verify`
+measures production draft behaviour whatever the ambient environment says.
+
+**Alternatives:** Importing `getAllBlogPosts` from `lib/content/blog.ts`.
+Rejected twice over. This script is the independent oracle: asking the code
+under test which slugs *ought* to 404 lets one bug conceal another. And Node's
+native type stripping cannot resolve that module's extensionless relative
+imports (`./env`), so a plain `.mjs` script cannot load it at all —
+`validate-content.mjs` gets away with importing `schemas.ts` and `validate.ts`
+only because neither has a relative import. A future script that needs a `lib`
+module with relative imports has to add explicit `.ts` extensions there first.
+
+**Consequences:** Adding a post extends the check for free. Next logs
+`Internal: NoFallbackError` when it refuses an unknown dynamic param — noise on
+the server's stderr, not a failure: the response is a 404 carrying the custom
+`app/not-found.tsx` page, which was checked by hand.
+
+---
+
+## 2026-09-11 — The phase 3 pipeline check is deleted, as planned
+
+**Context:** The 2026-09-10 decision above scheduled `content/_pipeline-check.mdx`,
+`app/mdx-pipeline-check/page.tsx` and their `verify.mjs` assertion for deletion
+once a real post rendered through `renderMdx`.
+
+**Decision:** Done in this phase. `/blog/[slug]` now renders the pipeline on
+real content, and `tests/mdx.test.tsx` keeps the regression protection with its
+own inline sources.
+
+**Consequences:** `validate-content.mjs` no longer has a live example of an
+underscored file to point at; its comment now states the convention instead.

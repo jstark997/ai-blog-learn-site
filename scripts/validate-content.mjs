@@ -55,7 +55,7 @@ const matter = gray.default;
 /** How a path is named in a report: relative to where the command was run. */
 const display = (absolutePath) => path.relative(process.cwd(), absolutePath) || ".";
 
-/** Scaffolding and dotfiles are not content; `_pipeline-check.mdx` is the case. */
+/** Scaffolding and dotfiles are not content: a `_` or `.` prefix excludes a file. */
 const isIgnored = (name) => name.startsWith(".") || name.startsWith("_");
 
 const isMdx = (name) => name.endsWith(".mdx");
