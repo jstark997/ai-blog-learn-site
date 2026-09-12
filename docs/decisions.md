@@ -812,3 +812,106 @@ injects its own keys. The middle ground then is to keep the strict schema and
 declare one ignored `meta:` mapping as an escape hatch, rather than to relax to
 passthrough with a warning; a warning that does not block is a warning nobody
 reads.
+
+---
+
+## 2026-09-11 — `getAllBlogPosts` returns raw MDX, not rendered React
+
+**Context:** The plan specifies `{ slug, metadata, content }` without saying
+what `content` is. `renderMdx` returns a `ReactElement`, so returning rendered
+content was an option.
+
+**Decision:** `content` is the raw MDX body with frontmatter stripped, exactly
+as `gray-matter` produces it. The route compiles it with `renderMdx`.
+
+**Alternatives:** Returning a rendered element, which would pull JSX and the
+whole plugin chain into `lib/content/` — contradicting the architecture
+invariant that `lib/content/` contains no JSX, and forcing the sitemap, the
+feed and every test to compile articles they only need metadata from.
+
+**Consequences:** A consumer that wants HTML does one more call. Blog
+retrieval stays usable from a plain Node test with no React runtime, and
+`lib/content/blog.ts` has no opinion about how a post is displayed.
+
+---
+
+## 2026-09-11 — Content-root parameter, so tests do not depend on sample content
+
+**Context:** `getAllBlogPosts()` reads `content/blog/`. Testing discovery,
+ordering and slug derivation against that directory would couple the test suite
+to scaffolding the author is expected to delete, and every new post would risk
+breaking an assertion.
+
+**Decision:** Both functions take an optional trailing `root` parameter
+defaulting to `<cwd>/content/blog`. Tests pass a temporary tree; application
+code calls `getAllBlogPosts()` and `getBlogPostBySlug(slug)`.
+
+**Alternatives:** Mocking `node:fs`, which tests the mock rather than the walk;
+an environment variable for the content root, which is real configuration for a
+test-only need; asserting against the sample posts, which is brittle.
+
+**Consequences:** Matches `scripts/validate-content.mjs`, which already accepts
+a content root for the same reason. The parameter is public surface that nothing
+in `app/` should ever pass — the doc comment says so. Three tests do still read
+`content/blog/` deliberately, to assert the §37 sample set exists, and they
+assert only properties that survive the author adding posts.
+
+---
+
+## 2026-09-11 — No caching layer on blog retrieval
+
+**Context:** During a static build, `getAllBlogPosts()` is called by the blog
+index, the home page, the sitemap and the feed, re-reading the same files each
+time.
+
+**Decision:** No memoisation. Each call walks the directory and reads the files.
+
+**Alternatives:** A module-level promise cache, which would have to be
+invalidated between tests and would hold a stale tree across `root` arguments;
+React's `cache()`, which is request-scoped and behaves differently outside a
+render, so the tests would exercise a different code path than the build.
+
+**Consequences:** A few dozen small file reads per build — cheaper than the
+machinery to avoid them (plan §2.6). If the content tree ever grows enough to
+matter, the fix is one wrapper in this module and nothing else changes.
+
+---
+
+## 2026-09-11 — Sample posts open with a Markdown blockquote, not `<Callout>`
+
+**Context:** Spec §3.1 requires every sample file to open with a visible
+placeholder callout and gives `<Callout variant="warning">` as its example. The
+MDX component registries, `Callout` among them, are phase 10. The blog UI is
+phase 6.
+
+**Decision:** The placeholder is a Markdown blockquote opening with
+**Placeholder content.** in bold. No sample file references a component.
+
+**Alternatives:** Writing `<Callout>` now, which would make phase 6 fail to
+render its own sample posts — an MDX file may only use components the registry
+passes it — and force phase 10's work to be pulled forward under a different
+phase's name.
+
+**Consequences:** The placeholder is visible and unmissable from phase 6
+onward, with no component dependency. When phase 10 lands `proseComponents`,
+the three sample files may be switched to `<Callout variant="warning">`; they
+are scaffolding either way, and the author's real posts will not carry one.
+
+---
+
+## 2026-09-11 — A blog slug must be a bare filename
+
+**Context:** `/blog/[slug]` hands `getBlogPostBySlug` a URL segment, which the
+function turns into a filesystem path.
+
+**Decision:** The slug is rejected — `null`, so the route 404s — unless it is
+non-empty, does not begin with `.`, and equals its own `path.basename`. A
+traversal attempt never reaches `readFile`.
+
+**Alternatives:** A strict `^[a-z0-9-]+$` pattern, which would also reject
+legitimate filenames the author might choose and make discovery and lookup
+disagree about what counts as a post.
+
+**Consequences:** Discovery and lookup stay consistent: anything
+`getAllBlogPosts()` can find, `getBlogPostBySlug()` can fetch. `dynamicParams =
+false` in phase 6 makes this belt-and-braces, which is the intent.
