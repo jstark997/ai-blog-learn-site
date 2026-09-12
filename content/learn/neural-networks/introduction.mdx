@@ -1,0 +1,46 @@
+---
+title: "What a Neural Network Is"
+description: "The smallest useful picture of a neural network: layers, weights, and a nonlinearity between them."
+order: 10
+difficulty: "beginner"
+publishedAt: "2026-08-24"
+draft: false
+---
+
+> **Placeholder content.** Scaffolding written by a coding agent (spec §3.1),
+> not editorial writing. This lesson is the first of its topic, so it is where
+> the "previous lesson" link is absent and the topic overview link is the only
+> way back.
+
+A feed-forward network is a stack of affine maps with a nonlinearity between
+them. One layer is a matrix multiply, a bias, and a function applied
+element-wise:
+
+$$
+h = \sigma(W x + b)
+$$
+
+Stack two of those and the network can represent something a single affine map
+cannot — which is the entire reason the nonlinearity is there.
+
+## The smallest version
+
+```python
+import numpy as np
+
+
+def layer(x: np.ndarray, w: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """One affine map followed by a nonlinearity."""
+    return np.maximum(0.0, x @ w + b)
+```
+
+## What the rest of this topic covers
+
+| Lesson                 | Question it answers                                  |
+| ---------------------- | ---------------------------------------------------- |
+| Activation Functions   | which $\sigma$, and what each choice costs            |
+| Gradient Descent       | how the weights move                                  |
+| Backpropagation        | where the gradients come from                         |
+
+A real lesson would build the intuition before the notation. This one exists to
+prove that lessons are discovered, ordered and linked.

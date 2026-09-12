@@ -1030,3 +1030,111 @@ own inline sources.
 
 **Consequences:** `validate-content.mjs` no longer has a live example of an
 underscored file to point at; its comment now states the convention instead.
+
+---
+
+## 2026-09-11 — Path conventions are shared by both content trees
+
+**Context:** `lib/content/blog.ts` had grown three private helpers — what
+counts as a content file, how a file is named in an error, and which URL
+segments are safe to rebuild a path from. `lib/content/learn.ts` needed all
+three, with identical answers.
+
+**Decision:** Extract them to `lib/content/paths.ts` (`MDX_EXTENSION`,
+`isIgnoredEntry`, `isContentFile`, `idFromFilename`, `displayPath`,
+`isReadableSegment`) and move `blog.ts` onto it.
+
+**Alternatives:** Copying the three helpers into `learn.ts`, which is how two
+trees start answering "is `_draft.mdx` content?" differently — and the
+traversal guard is the one that must not drift, because both take their ids
+from URL segments.
+
+**Consequences:** One change updates both trees, and
+`scripts/validate-content.mjs` keeps matching them because it walks by the same
+convention. `blog.ts` changed in this phase without its behaviour changing;
+`tests/blog.test.ts` passes untouched, which is the evidence.
+
+---
+
+## 2026-09-11 — `getAllLessons` is flat, ordered by topic rank then lesson order
+
+**Context:** Lessons are grouped by topic, but the topic's position lives in
+`topics.ts`, not in the content tree. A retrieval function could return a
+grouped structure or a flat list.
+
+**Decision:** Flat, sorted by `topicRank(topicId)`, then topic id, then `order`
+ascending with lesson id as a tiebreak. Grouping is the Learn index's job, and
+it groups from `learningTopics` — the only place topic titles exist anyway.
+
+**Alternatives:** Returning `Array<{ topic, lessons }>`. The sitemap, the feed
+and every count would flatten it straight back, and the shape would carry
+presentation data into a module that otherwise knows nothing about titles.
+
+**Consequences:** A topic directory with no `topics.ts` entry sorts last rather
+than throwing — `validate:content` already fails the build on one, and a
+listing that still renders during a rename is more useful in `pnpm dev` than a
+crash.
+
+---
+
+## 2026-09-11 — `validate-content.mjs` takes the topics module as a second argument
+
+**Context:** Topic parity — every `content/learn/<topic>/` has a `topics.ts`
+entry and vice versa — is checked against the repository's real `topics.ts`.
+Once that file existed, every test that hands the script a throwaway content
+tree began failing: its trees have no learn directories, so both configured
+topics reported "no directory".
+
+**Decision:** `node scripts/validate-content.mjs <contentRoot> [topicsModule]`.
+The second argument defaults to `lib/content/topics.ts`, and the tests write a
+one-line topics module beside their temp tree.
+
+**Alternatives:** Skipping parity whenever a custom content root is given —
+which would leave the check untested end-to-end, exactly where the plan asks
+for a `validate:content` test. Or mirroring the real topic ids in every test
+tree, which reintroduces the coupling the content-root parameter removed.
+
+**Consequences:** Parity is now exercised in both directions by
+`tests/validate-content.test.ts`. `pnpm validate:content` is unchanged.
+
+---
+
+## 2026-09-11 — The sample draft lesson is the last of its topic, not the middle
+
+**Context:** Spec §37 asks for at least one draft lesson, and §13 asks that
+adjacency skip a draft rather than link to a page that 404s. The obvious
+demonstration would be a draft in the middle of Neural Networks.
+
+**Decision:** `neural-networks/backpropagation.mdx` (order 40) is the draft.
+The mid-topic case — previous/next stepping over a hidden lesson — is covered
+by `tests/learn.test.ts` against a throwaway tree instead.
+
+**Alternatives:** Drafting `activation-functions` or `gradient-descent`. Those
+two host the Activation Function Explorer and the Gradient Descent Demo
+(spec §37), so drafting either would hide an interactive component from
+production the moment phases 11 and 12 land — a sample that breaks the thing it
+is meant to demonstrate.
+
+**Consequences:** The sample tree exercises draft filtering and end-of-topic
+adjacency; the skip-a-draft path is proved by tests, which is where it stays
+proved after the author replaces this content.
+
+---
+
+## 2026-09-11 — Sample lessons carry no demo components yet
+
+**Context:** Spec §37 places the Activation Function Explorer in
+`activation-functions.mdx` and the Gradient Descent Demo in
+`gradient-descent.mdx`. Neither component exists: they arrive in phases 11 and
+12, and the MDX registry that would resolve their names arrives in phase 10.
+
+**Decision:** The two lessons carry prose, mathematics and code only, each
+saying in its placeholder callout that the demonstration arrives later. The
+tags are added by the phase that adds the component.
+
+**Alternatives:** Writing `<GradientDescentDemo />` now, which would fail to
+render for three phases — MDX resolves an unknown component to nothing useful
+and the lesson page would be visibly broken meanwhile.
+
+**Consequences:** Phases 11 and 12 each edit one lesson file as part of their
+own work. Nothing in the tree references a component that does not exist.

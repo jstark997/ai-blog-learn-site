@@ -1,0 +1,49 @@
+---
+title: "Gradient Descent"
+description: "The optimization loop underneath every trained network, and what the learning rate actually controls."
+order: 30
+difficulty: "intermediate"
+prerequisites:
+  - "neural-networks/introduction"
+  - "neural-networks/activation-functions"
+publishedAt: "2026-09-02"
+draft: false
+---
+
+> **Placeholder content.** Scaffolding written by a coding agent (spec §3.1),
+> not editorial writing. The Gradient Descent Demo is embedded here in a later
+> phase; the prose below is a stand-in for the explanation that will surround
+> it.
+
+Training is a search for parameters that make a loss small. Gradient descent
+takes the cheapest available step towards that: move against the gradient, by
+an amount the learning rate sets.
+
+$$
+\theta_{t+1} = \theta_{t} - \eta \, \nabla_{\theta} L(\theta_{t})
+$$
+
+The learning rate $\eta$ is the whole drama. Too small and the loss creeps down
+over more steps than anyone will wait for; too large and each step overshoots
+the minimum it was aiming at, and the loss climbs instead.
+
+## The loop
+
+```python
+def descend(theta, grad, learning_rate=0.1, steps=100):
+    """Plain gradient descent, with no momentum and no schedule."""
+    for _ in range(steps):
+        theta = theta - learning_rate * grad(theta)
+    return theta
+```
+
+## What the demonstration will show
+
+| Learning rate | Behaviour                                   |
+| ------------- | ------------------------------------------- |
+| `0.01`        | converges, slowly                            |
+| `0.10`        | converges in a handful of steps              |
+| `1.05`        | oscillates, then diverges                    |
+
+A real lesson would make the reader predict which column they are in before
+revealing it.

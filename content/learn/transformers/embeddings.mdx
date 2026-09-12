@@ -1,0 +1,41 @@
+---
+title: "Token Embeddings"
+description: "How discrete tokens become vectors a network can compute with, and what that vector space does and does not encode."
+order: 10
+difficulty: "beginner"
+prerequisites:
+  - "neural-networks/introduction"
+publishedAt: "2026-09-04"
+draft: false
+---
+
+> **Placeholder content.** Scaffolding written by a coding agent (spec §3.1),
+> not editorial writing. This lesson exists so the Learn index has a second
+> topic to group, and so a prerequisite can point across topic boundaries.
+
+A language model cannot multiply a word. The embedding table is the lookup that
+turns token id $i$ into the $i$-th row of a learned matrix
+$E \in \mathbb{R}^{|V| \times d}$:
+
+$$
+x_i = E_{i}
+$$
+
+Nothing about that row is meaningful at initialization. It becomes meaningful
+only because the same rows are reused everywhere the token appears, so training
+pressure from every context accumulates in one place.
+
+## The lookup
+
+```python
+import numpy as np
+
+vocab_size, d_model = 50_000, 512
+embeddings = np.random.normal(scale=0.02, size=(vocab_size, d_model))
+
+token_ids = [15496, 995]
+x = embeddings[token_ids]          # (2, 512)
+```
+
+Position is not in there. The transformer adds it separately — which is the
+thread the next lesson picks up.
