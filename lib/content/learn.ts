@@ -192,3 +192,39 @@ export async function getAdjacentLessons(
     next: lessons[index + 1] ?? null,
   };
 }
+
+/**
+ * A prerequisite, resolved against the content tree (spec §12).
+ *
+ * `title` is `null` when nothing resolves the path. `validate:content` fails a
+ * build on an unresolvable prerequisite, so in a published tree that case means
+ * the target is a draft the current environment hides — a lesson page then
+ * names the prerequisite without linking to a page that would 404.
+ */
+export type Prerequisite = {
+  topicId: string;
+  lessonId: string;
+  title: string | null;
+};
+
+/**
+ * Resolves `<topic-id>/<lesson-id>` prerequisite paths to the titles their
+ * targets carry, so a lesson page can link to them by name rather than by
+ * identifier and the two cannot drift apart when a title is edited.
+ *
+ * Lives here rather than in the page because it is content lookup, not
+ * presentation: the route only turns the result into anchors.
+ */
+export async function getPrerequisites(
+  paths: readonly string[],
+  root: string = LEARN_ROOT,
+): Promise<Prerequisite[]> {
+  return Promise.all(
+    paths.map(async (prerequisite) => {
+      const [topicId = "", lessonId = ""] = prerequisite.split("/");
+      const lesson = await getLessonByPath(topicId, lessonId, root);
+
+      return { topicId, lessonId, title: lesson?.metadata.title ?? null };
+    }),
+  );
+}

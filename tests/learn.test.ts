@@ -416,6 +416,40 @@ describe("learningTopics", () => {
   });
 });
 
+describe("getPrerequisites", () => {
+  it("resolves each path to the target lesson's own title", async () => {
+    const tree = await contentTree({
+      ...neuralNetworks,
+      "transformers/attention.mdx": lesson("Attention", 20),
+    });
+    const { getPrerequisites } = await learnWithDrafts(false);
+
+    const resolved = await getPrerequisites(
+      ["neural-networks/introduction", "transformers/attention"],
+      tree,
+    );
+
+    expect(resolved).toEqual([
+      { topicId: "neural-networks", lessonId: "introduction", title: "Introduction" },
+      { topicId: "transformers", lessonId: "attention", title: "Attention" },
+    ]);
+  });
+
+  it("reports a hidden or missing target as unresolved rather than inventing a link", async () => {
+    const tree = await contentTree({
+      "neural-networks/backpropagation.mdx": lesson("Backprop", 40, ["draft: true"]),
+    });
+    const { getPrerequisites } = await learnWithDrafts(false);
+
+    const resolved = await getPrerequisites(
+      ["neural-networks/backpropagation", "neural-networks/nothing-here"],
+      tree,
+    );
+
+    expect(resolved.map((entry) => entry.title)).toEqual([null, null]);
+  });
+});
+
 /**
  * The sample content itself (spec §37): two topics, and at least one draft
  * lesson so draft filtering and adjacency-across-drafts are actually

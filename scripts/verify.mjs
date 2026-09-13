@@ -2,10 +2,10 @@
 // Builds the application, serves it on a free port, asserts that the routes
 // below respond as expected, and shuts the server down cleanly.
 //
-// The blog assertions are derived from `content/blog/`, not hard-coded: every
-// published post must return 200 and every draft must return 404, so adding a
-// post extends the check automatically (application spec §54.1). Later phases
-// add the learn routes, the sitemap and the RSS feed.
+// The assertions are derived from `content/`, not hard-coded: every published
+// post and lesson must return 200 and every draft must return 404, so adding
+// either extends the check automatically (application spec §54.1). Later phases
+// add the sitemap and the RSS feed.
 //
 // The server runs with SHOW_DRAFTS=false, so `pnpm verify` always measures
 // *production* draft behaviour whatever the ambient environment says (spec §16).
@@ -24,6 +24,7 @@ import matter from "gray-matter";
 
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const BLOG_ROOT = path.join(REPOSITORY_ROOT, "content", "blog");
+const LEARN_ROOT = path.join(REPOSITORY_ROOT, "content", "learn");
 
 /** The environment the build and the server run in: production behaviour. */
 const SERVER_ENV = { ...process.env, SHOW_DRAFTS: "false" };
@@ -39,6 +40,11 @@ const POLL_INTERVAL_MS = 250;
  * @property {string} description
  * @property {string[]} [bodyExcludes] substrings the response must not contain
  */
+
+/** Scaffolding and editor droppings are not content, in either tree. */
+function isContentFile(name) {
+  return name.endsWith(".mdx") && !name.startsWith("_") && !name.startsWith(".");
+}
 
 /**
  * Every post in `content/blog/`, as `{ slug, draft }`.
@@ -58,13 +64,7 @@ const POLL_INTERVAL_MS = 250;
  */
 async function blogPosts() {
   const entries = await readdir(BLOG_ROOT, { withFileTypes: true });
-  const files = entries.filter(
-    (entry) =>
-      entry.isFile() &&
-      entry.name.endsWith(".mdx") &&
-      !entry.name.startsWith("_") &&
-      !entry.name.startsWith("."),
-  );
+  const files = entries.filter((entry) => entry.isFile() && isContentFile(entry.name));
 
   return Promise.all(
     files.map(async (entry) => {
@@ -77,18 +77,82 @@ async function blogPosts() {
   );
 }
 
+/** The route a lesson answers on, spelt out by its place in the tree. */
+function lessonUrl({ topicId, lessonId }) {
+  return `/learn/${topicId}/${lessonId}`;
+}
+
+/**
+ * Every lesson in `content/learn/`, as `{ topicId, lessonId, draft }`.
+ *
+ * The tree is the data model: the directory is the topic and the filename is
+ * the lesson (spec §11.1), so the route each entry must answer on is spelt out
+ * by the path and nothing here consults frontmatter for it. Read directly, for
+ * the same reason the posts are.
+ *
+ * @returns {Promise<{ topicId: string; lessonId: string; draft: boolean }[]>}
+ */
+async function lessons() {
+  const topics = await readdir(LEARN_ROOT, { withFileTypes: true });
+  const directories = topics.filter(
+    (entry) => entry.isDirectory() && !entry.name.startsWith("_") && !entry.name.startsWith("."),
+  );
+
+  const byTopic = await Promise.all(
+    directories.map(async (topic) => {
+      const entries = await readdir(path.join(LEARN_ROOT, topic.name), { withFileTypes: true });
+      const files = entries.filter((entry) => entry.isFile() && isContentFile(entry.name));
+
+      return Promise.all(
+        files.map(async (entry) => {
+          const source = await readFile(path.join(LEARN_ROOT, topic.name, entry.name), "utf8");
+          return {
+            topicId: topic.name,
+            lessonId: entry.name.slice(0, -".mdx".length),
+            draft: matter(source).data.draft === true,
+          };
+        }),
+      );
+    }),
+  );
+
+  return byTopic.flat();
+}
+
 /** @returns {Promise<Assertion[]>} */
 async function assertions() {
   const posts = await blogPosts();
-  const published = posts.filter((post) => !post.draft);
-  const drafts = posts.filter((post) => post.draft);
+  const publishedPosts = posts.filter((post) => !post.draft);
+  const draftPosts = posts.filter((post) => post.draft);
 
-  if (published.length === 0) {
+  if (publishedPosts.length === 0) {
     throw new Error("No published blog posts found; there is nothing to verify");
   }
-  if (drafts.length === 0) {
+  if (draftPosts.length === 0) {
     throw new Error("No draft blog post found; draft gating would go unverified");
   }
+
+  const allLessons = await lessons();
+  const publishedLessons = allLessons.filter((lesson) => !lesson.draft);
+  const draftLessons = allLessons.filter((lesson) => lesson.draft);
+
+  if (publishedLessons.length === 0) {
+    throw new Error("No published lessons found; there is nothing to verify");
+  }
+  if (draftLessons.length === 0) {
+    throw new Error("No draft lesson found; draft gating would go unverified");
+  }
+
+  // Every draft lesson URL, in the form a link to it would take: no index and
+  // no topic page may mention one in production (spec §16).
+  const hiddenLessonUrls = draftLessons.map((lesson) => lessonUrl(lesson));
+
+  // A topic page exists exactly where a published lesson does; a topic whose
+  // every lesson is a draft is not generated at all.
+  const publishedTopics = [...new Set(publishedLessons.map((lesson) => lesson.topicId))];
+  const emptyTopics = [...new Set(allLessons.map((lesson) => lesson.topicId))].filter(
+    (topicId) => !publishedTopics.includes(topicId),
+  );
 
   return [
     { path: "/", status: 200, description: "homepage" },
@@ -97,21 +161,53 @@ async function assertions() {
       status: 200,
       description: "blog index, with no draft on it",
       // A draft that reached the index would show up as its own URL.
-      bodyExcludes: drafts.map((post) => `/blog/${post.slug}`),
+      bodyExcludes: draftPosts.map((post) => `/blog/${post.slug}`),
     },
-    { path: "/learn", status: 200, description: "learn index" },
     { path: "/about", status: 200, description: "about page" },
-    ...published.map((post) => ({
+    ...publishedPosts.map((post) => ({
       path: `/blog/${post.slug}`,
       status: 200,
       description: "published post",
     })),
-    ...drafts.map((post) => ({
+    ...draftPosts.map((post) => ({
       path: `/blog/${post.slug}`,
       status: 404,
       description: "draft post, hidden in production",
     })),
     { path: "/blog/no-such-post-exists", status: 404, description: "unknown post" },
+    {
+      path: "/learn",
+      status: 200,
+      description: "learn index, with no draft lesson on it",
+      bodyExcludes: hiddenLessonUrls,
+    },
+    ...publishedTopics.map((topicId) => ({
+      path: `/learn/${topicId}`,
+      status: 200,
+      description: "topic overview, with no draft lesson on it",
+      bodyExcludes: hiddenLessonUrls,
+    })),
+    ...emptyTopics.map((topicId) => ({
+      path: `/learn/${topicId}`,
+      status: 404,
+      description: "topic with nothing published in it",
+    })),
+    ...publishedLessons.map((lesson) => ({
+      path: lessonUrl(lesson),
+      status: 200,
+      description: "published lesson",
+    })),
+    ...draftLessons.map((lesson) => ({
+      path: lessonUrl(lesson),
+      status: 404,
+      description: "draft lesson, hidden in production",
+    })),
+    { path: "/learn/no-such-topic", status: 404, description: "unknown topic" },
+    {
+      path: `/learn/${publishedTopics[0]}/no-such-lesson`,
+      status: 404,
+      description: "unknown lesson in a real topic",
+    },
     { path: "/no-such-page", status: 404, description: "custom 404" },
   ];
 }
