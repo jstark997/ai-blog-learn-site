@@ -14,8 +14,9 @@
 // build reads each file. This script is only the walk, the report and the exit
 // code.
 //
-//   pnpm validate:content              checks content/
-//   node scripts/validate-content.mjs <dir>   checks another tree, for tests
+//   pnpm validate:content                                checks content/
+//   node scripts/validate-content.mjs <dir> [topics.ts]  checks another tree,
+//                                                        for tests
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
@@ -43,9 +44,18 @@ if (!process.features.typescript) {
 
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const CONTENT_ROOT = path.resolve(process.argv[2] ?? path.join(REPOSITORY_ROOT, "content"));
-const TOPICS_MODULE = path.join(REPOSITORY_ROOT, "lib", "content", "topics.ts");
 
-const load = (relativePath) => import(pathToFileURL(path.join(REPOSITORY_ROOT, relativePath)).href);
+// The topic configuration is a second argument for the same reason the content
+// root is the first one: a test hands the script a tree of its own, and topic
+// parity is meaningless unless the topics it is checked against come from that
+// tree too. Without it every test tree would have to mirror whichever topics
+// the author happens to have today.
+const TOPICS_MODULE = path.resolve(
+  process.argv[3] ?? path.join(REPOSITORY_ROOT, "lib", "content", "topics.ts"),
+);
+
+const load = (relativePath) =>
+  import(pathToFileURL(path.resolve(REPOSITORY_ROOT, relativePath)).href);
 const { blogPostSchema, lessonSchema } = await load("lib/content/schemas.ts");
 const { checkFrontmatter, crossFileIssues, formatIssue } = await load("lib/content/validate.ts");
 
@@ -176,11 +186,11 @@ for (const entry of await readDirectory(learnRoot)) {
 }
 
 // --- topic presentation data ----------------------------------------------
-// `lib/content/topics.ts` arrives with the learn content model in phase 7.
-// Until then there are no topic directories either, so parity holds trivially.
+// A topic's identity is its directory name; this file only says how to display
+// it. Parity between the two is checked below (spec §11.1).
 let configuredTopicIds = [];
 if (existsSync(TOPICS_MODULE)) {
-  const topicsModule = await load("lib/content/topics.ts");
+  const topicsModule = await load(TOPICS_MODULE);
   const topics = topicsModule.learningTopics ?? topicsModule.default;
   if (!Array.isArray(topics)) {
     report(TOPICS_MODULE, "error", "learningTopics: Expected an exported array of topics");

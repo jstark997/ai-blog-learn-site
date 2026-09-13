@@ -1,0 +1,30 @@
+---
+title: "Backpropagation"
+description: "Where the gradients in the training loop come from: the chain rule, applied backwards through the network."
+order: 40
+difficulty: "advanced"
+prerequisites:
+  - "neural-networks/gradient-descent"
+publishedAt: "2026-09-09"
+draft: true
+---
+
+> **Placeholder content.** Scaffolding written by a coding agent (spec §3.1),
+> not editorial writing. This is the sample *draft lesson*: it is visible in
+> `pnpm dev` and on preview deployments, and it must not appear anywhere in
+> production — not on the Learn index, not on its topic page, not at its own
+> URL, and not as the "next lesson" from Gradient Descent (spec §13, §16).
+
+Gradient descent needs $\nabla_{\theta} L$. Backpropagation is how a network
+computes it without differentiating the whole composed function by hand: apply
+the chain rule layer by layer, reusing what the layer above already computed.
+
+$$
+\frac{\partial L}{\partial W^{(\ell)}}
+= \delta^{(\ell)} \left(a^{(\ell-1)}\right)^{\top}
+\qquad
+\delta^{(\ell)} = \left(\left(W^{(\ell+1)}\right)^{\top} \delta^{(\ell+1)}\right) \odot \sigma'\!\left(z^{(\ell)}\right)
+$$
+
+If this lesson is readable on the production site, draft filtering is broken
+and `getAllLessons()` is the first place to look.

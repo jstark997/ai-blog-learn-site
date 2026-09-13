@@ -23,13 +23,18 @@ import path from "node:path";
 import matter from "gray-matter";
 
 import { showDrafts } from "./env";
+import {
+  MDX_EXTENSION,
+  displayPath,
+  idFromFilename,
+  isContentFile,
+  isReadableSegment,
+} from "./paths";
 import { blogPostSchema, type BlogPostMetadata } from "./schemas";
 import { parseFrontmatter } from "./validate";
 
 /** Posts are flat `.mdx` files; the filename is the slug (spec §9.2, §26). */
 const BLOG_ROOT = path.join(process.cwd(), "content", "blog");
-
-const MDX_EXTENSION = ".mdx";
 
 export type BlogPost = {
   /** Derived from the filename. There is no `slug` field in frontmatter. */
@@ -38,29 +43,6 @@ export type BlogPost = {
   /** The MDX body, frontmatter stripped. Hand it to `renderMdx` to display. */
   content: string;
 };
-
-/**
- * Scaffolding and editor droppings are not content. `_` and `.` prefixes are
- * the same convention `scripts/validate-content.mjs` walks the tree with, so a
- * file either counts for both or for neither.
- */
-function isIgnored(name: string): boolean {
-  return name.startsWith(".") || name.startsWith("_");
-}
-
-/** How a file is named in a validation error: relative to the repository. */
-function displayPath(file: string): string {
-  return path.relative(process.cwd(), file);
-}
-
-/**
- * A slug that could escape the content directory, name a dotfile, or reach a
- * nested path is not a slug — it is a traversal attempt or a typo. Rejecting
- * it here means `getBlogPostBySlug` can build a path from untrusted input.
- */
-function isReadableSlug(slug: string): boolean {
-  return slug.length > 0 && !slug.startsWith(".") && path.basename(slug) === slug;
-}
 
 /**
  * Reads and validates one file. Returns `null` when the file is absent, or
@@ -116,8 +98,8 @@ export async function getAllBlogPosts(root: string = BLOG_ROOT): Promise<BlogPos
   }
 
   const slugs = entries
-    .filter((entry) => entry.isFile() && entry.name.endsWith(MDX_EXTENSION) && !isIgnored(entry.name))
-    .map((entry) => entry.name.slice(0, -MDX_EXTENSION.length));
+    .filter((entry) => entry.isFile() && isContentFile(entry.name))
+    .map((entry) => idFromFilename(entry.name));
 
   const posts = await Promise.all(slugs.map((slug) => readPost(root, slug)));
 
@@ -135,7 +117,7 @@ export async function getBlogPostBySlug(
   slug: string,
   root: string = BLOG_ROOT,
 ): Promise<BlogPost | null> {
-  if (!isReadableSlug(slug)) return null;
+  if (!isReadableSegment(slug)) return null;
 
   const post = await readPost(root, slug);
   if (post === null) return null;
