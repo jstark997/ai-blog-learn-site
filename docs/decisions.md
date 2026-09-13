@@ -1138,3 +1138,73 @@ and the lesson page would be visibly broken meanwhile.
 
 **Consequences:** Phases 11 and 12 each edit one lesson file as part of their
 own work. Nothing in the tree references a component that does not exist.
+
+---
+
+## 2026-09-13 — Learn's presentational components live in `components/lesson/`
+
+**Context:** The blog's listing components sit in `components/blog/`, so the
+obvious home for a lesson card is `components/learn/`. Spec §6 reserves that
+directory for the interactive demonstrations — `neural-networks/`,
+`transformers/`, `shared/` — and CLAUDE.md records the same split: everything
+under `components/learn/` is a client component, lazily loaded.
+
+**Decision:** Server-rendered Learn UI — `LessonCard`, `LessonList`,
+`LessonMeta`, `PrerequisiteList` — goes in `components/lesson/`.
+`components/learn/` stays empty until phase 11 puts the first demo in it.
+
+**Alternatives:** `components/learn/shared/`, which would put server components
+inside the directory whose whole contents are otherwise `"use client"`, and
+make the "everything here is a demo" rule something a reader has to check file
+by file. Or `components/content/`, which holds the pieces both sections share
+(`DraftBadge`, `PlaceholderNote`) and would stop meaning that.
+
+**Consequences:** A directory name answers "is this shipped to the browser?".
+Phase 11 adds `components/learn/` with no reshuffling of this phase's work.
+
+---
+
+## 2026-09-13 — A topic with nothing published in it has no page
+
+**Context:** `topics.ts` declares a topic and the directory supplies its
+lessons, so a topic can legitimately exist with every lesson still a draft —
+during authoring, that is the normal state of a new topic. `/learn` and
+`/learn/[topic]` both have to decide what to show for it in production.
+
+**Decision:** Such a topic is left off the Learn index, `generateStaticParams`
+does not generate it, and `/learn/<topic>` calls `notFound()`. Topic routes are
+derived from the visible lessons, not from `topics.ts`.
+
+**Alternatives:** Rendering the heading with an empty list, or a topic page
+reading "no lessons yet" — a published page that announces the author's
+unfinished work, and an entry in phase 16's sitemap with nothing on it. Neither
+is what a visitor should meet in production; in development and on previews the
+drafts are visible, so the topic appears there as normal.
+
+**Consequences:** A topic becomes reachable the moment its first lesson is
+published, with no separate switch to remember. `pnpm verify` asserts the 404
+for any topic in the tree with nothing published in it.
+
+---
+
+## 2026-09-13 — Prerequisites resolve in the content layer, and unresolved ones are not linked
+
+**Context:** Spec §12 asks that a lesson page render prerequisites as links
+"using the target lesson's own title", so the `<topic-id>/<lesson-id>` paths in
+frontmatter have to be resolved against the tree before anything is rendered.
+`validate:content` guarantees they resolve to published lessons — but only in
+the tree it validated, and a prerequisite whose target is a draft resolves to
+nothing while drafts are hidden.
+
+**Decision:** `getPrerequisites` in `lib/content/learn.ts` returns
+`{ topicId, lessonId, title }`, with `title: null` for anything it cannot
+resolve. The page renders a resolved prerequisite as a link and an unresolved
+one as its plain path.
+
+**Alternatives:** Resolving in the page, which would put content lookup in a
+route; or linking unconditionally, which would produce a link to a 404 on a
+development server the moment an author drafts a lesson another one depends on.
+
+**Consequences:** Titles cannot drift from the lessons they name. The
+unresolved case is a development-time signal rather than a broken published
+page, and phase 9's navigation reuses the same resolver shape.
