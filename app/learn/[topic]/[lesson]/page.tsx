@@ -5,8 +5,17 @@ import { DraftBadge } from "@/components/content/DraftBadge";
 import { Container } from "@/components/layout/Container";
 import { LessonMeta } from "@/components/lesson/LessonMeta";
 import { PrerequisiteList } from "@/components/lesson/PrerequisiteList";
-import { getAllLessons, getLessonByPath, getPrerequisites } from "@/lib/content/learn";
+import { LessonPager } from "@/components/navigation/LessonPager";
+import { TopicLessonNav } from "@/components/navigation/TopicLessonNav";
+import {
+  getAdjacentLessons,
+  getAllLessons,
+  getLessonByPath,
+  getLessonsByTopic,
+  getPrerequisites,
+} from "@/lib/content/learn";
 import { renderMdx } from "@/lib/content/mdx";
+import { getTopic } from "@/lib/content/topics";
 
 /**
  * As on the article route: `generateStaticParams` alone would not keep a draft
@@ -55,8 +64,14 @@ export async function generateMetadata({
  *
  * The page template owns the `<h1>`; the MDX body starts its headings at `##`
  * (spec §12). It renders with no component registry yet — `proseComponents` and
- * `demoComponents` arrive in phase 10 (spec §15) — and the topic, previous and
- * next links are phase 9.
+ * `demoComponents` arrive in phase 10 (spec §15).
+ *
+ * Navigation is built from metadata and never from the MDX (spec §13): the
+ * sidebar lists the topic, the pager carries the neighbours, and both come from
+ * the same draft-filtered ordering, so neither can offer a link to a lesson
+ * this environment hides. A topic the presentation table does not declare is a
+ * `validate:content` failure and so cannot reach a build; while `pnpm dev` is
+ * showing one, the directory name stands in for the title.
  */
 export default async function LessonPage({ params }: PageProps<"/learn/[topic]/[lesson]">) {
   const { topic: topicId, lesson: lessonId } = await params;
@@ -64,23 +79,43 @@ export default async function LessonPage({ params }: PageProps<"/learn/[topic]/[
   if (lesson === null) notFound();
 
   const { metadata } = lesson;
-  const [prerequisites, content] = await Promise.all([
+  const [prerequisites, content, siblings, adjacent] = await Promise.all([
     getPrerequisites(metadata.prerequisites),
     renderMdx({ source: lesson.content }),
+    getLessonsByTopic(topicId),
+    getAdjacentLessons(topicId, lessonId),
   ]);
 
   return (
-    <Container width="prose">
-      <article>
-        <header className="flex flex-col gap-4 border-b border-rule pb-8">
-          {metadata.draft && <DraftBadge />}
-          <h1 className="text-4xl font-semibold tracking-tight text-balance">{metadata.title}</h1>
-          <p className="text-lg text-muted text-pretty">{metadata.description}</p>
-          <LessonMeta metadata={metadata} />
-          {prerequisites.length > 0 && <PrerequisiteList prerequisites={prerequisites} className="mt-2" />}
-        </header>
-        <div className="prose mt-10">{content}</div>
-      </article>
+    <Container className="lg:grid lg:grid-cols-[15rem_minmax(0,1fr)] lg:items-start lg:gap-12">
+      <TopicLessonNav
+        topicId={topicId}
+        topicTitle={getTopic(topicId)?.title ?? topicId}
+        lessons={siblings}
+        currentLessonId={lessonId}
+        className="mb-10 lg:sticky lg:top-8 lg:mb-0"
+      />
+
+      <div className="min-w-0 max-w-measure">
+        <article>
+          <header className="flex flex-col gap-4 border-b border-rule pb-8">
+            {metadata.draft && <DraftBadge />}
+            <h1 className="text-4xl font-semibold tracking-tight text-balance">{metadata.title}</h1>
+            <p className="text-lg text-muted text-pretty">{metadata.description}</p>
+            <LessonMeta metadata={metadata} />
+            {prerequisites.length > 0 && (
+              <PrerequisiteList prerequisites={prerequisites} className="mt-2" />
+            )}
+          </header>
+          <div className="prose mt-10">{content}</div>
+        </article>
+
+        <LessonPager
+          previous={adjacent.previous}
+          next={adjacent.next}
+          className="mt-16 border-t border-rule pt-8"
+        />
+      </div>
     </Container>
   );
 }
