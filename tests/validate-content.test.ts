@@ -117,6 +117,37 @@ describe("pnpm validate:content", () => {
     expect(stdout).toContain("0 errors, 1 warning");
   });
 
+  it("fails on a published post that imports, since MDX files import nothing", async () => {
+    const tree = await contentTree({
+      "blog/importing.mdx": [
+        "---",
+        'title: "It imports"',
+        'description: "Which cannot work."',
+        "publishedAt: 2026-09-04",
+        "---",
+        "",
+        'import { Chart } from "./chart";',
+        "",
+        "<Chart />",
+      ].join("\n"),
+    });
+
+    const { status, stderr } = validate(tree);
+
+    expect(status).toBe(1);
+    expect(stderr).toContain("blog/importing.mdx");
+    expect(stderr).toContain("Line 7");
+    expect(stderr).toContain("registry");
+  });
+
+  it("passes a published post whose code block imports, which is only code", async () => {
+    const tree = await contentTree({
+      "blog/published.mdx": [published, "", "```python", "import numpy as np", "```"].join("\n"),
+    });
+
+    expect(validate(tree).status).toBe(0);
+  });
+
   it("fails on frontmatter that is not valid YAML", async () => {
     const tree = await contentTree({
       "blog/broken.mdx": ["---", 'title: "Unclosed', "---", "", "Body."].join("\n"),

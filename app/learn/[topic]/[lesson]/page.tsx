@@ -3,8 +3,10 @@ import { notFound } from "next/navigation";
 
 import { DraftBadge } from "@/components/content/DraftBadge";
 import { Container } from "@/components/layout/Container";
+import { demoComponents } from "@/components/learn/registry";
 import { LessonMeta } from "@/components/lesson/LessonMeta";
 import { PrerequisiteList } from "@/components/lesson/PrerequisiteList";
+import { proseComponents } from "@/components/mdx/registry";
 import { LessonPager } from "@/components/navigation/LessonPager";
 import { TopicLessonNav } from "@/components/navigation/TopicLessonNav";
 import {
@@ -16,6 +18,18 @@ import {
 } from "@/lib/content/learn";
 import { renderMdx } from "@/lib/content/mdx";
 import { getTopic } from "@/lib/content/topics";
+
+/**
+ * What a lesson's MDX may use (spec §15): the prose components every page has,
+ * plus this topic's interactive demonstrations. Built once, at module scope,
+ * rather than per request.
+ *
+ * The demos are spread second, so a demo cannot be shadowed by a prose
+ * component that happens to share its name. Every demo is wrapped in
+ * `next/dynamic` inside its registry, which is what keeps the JavaScript of a
+ * demo out of the lessons that do not embed it.
+ */
+const lessonComponents = { ...proseComponents, ...demoComponents };
 
 /**
  * As on the article route: `generateStaticParams` alone would not keep a draft
@@ -63,8 +77,10 @@ export async function generateMetadata({
  * 404 through the same guard.
  *
  * The page template owns the `<h1>`; the MDX body starts its headings at `##`
- * (spec §12). It renders with no component registry yet — `proseComponents` and
- * `demoComponents` arrive in phase 10 (spec §15).
+ * (spec §12). It renders with both registries, `proseComponents` first so a
+ * demo could never be shadowed by a prose component of the same name (spec
+ * §15). Each demo is lazily imported, so a lesson downloads only the demos it
+ * embeds; a lesson with none downloads no demo JavaScript at all.
  *
  * Navigation is built from metadata and never from the MDX (spec §13): the
  * sidebar lists the topic, the pager carries the neighbours, and both come from
@@ -81,7 +97,7 @@ export default async function LessonPage({ params }: PageProps<"/learn/[topic]/[
   const { metadata } = lesson;
   const [prerequisites, content, siblings, adjacent] = await Promise.all([
     getPrerequisites(metadata.prerequisites),
-    renderMdx({ source: lesson.content }),
+    renderMdx({ source: lesson.content, components: lessonComponents }),
     getLessonsByTopic(topicId),
     getAdjacentLessons(topicId, lessonId),
   ]);

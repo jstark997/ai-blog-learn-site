@@ -1288,3 +1288,155 @@ the reason the script already reads frontmatter directly rather than through
 neighbour fails the gate on the real HTML. The script now carries a second copy
 of the ordering rule (spec §13); a change to that rule has to be made in both
 places, which is the price of an independent oracle.
+
+---
+
+## 2026-09-13 — The prose registry overrides three tags: `a`, `img` and `table`
+
+**Context:** Phase 10's brief names `Callout`, `Figure`, `Equation`,
+`ExternalLink` and overrides for `a` and `img`. A third override was already
+owed: the `.prose table` rules written in phase 3 record that the scrollable
+wrapper "belongs to the `table` override in the prose registry (phase 10)",
+because a table wide enough to overflow the reading column had nowhere to
+scroll.
+
+**Decision:** `proseComponents` overrides `a`, `img` and `table`, and nothing
+else. `MdxTable` renders the `<table>` unchanged inside a
+`<div role="region" aria-label="Table" tabIndex={0} class="overflow-x-auto">`.
+Every other tag markdown emits — headings, lists, code, blockquotes — is styled
+by `.prose` in `app/globals.css` and needs no component.
+
+**Alternatives:** `display: block` on the table itself, which scrolls but costs
+the table role in some screen readers. Or leaving wide tables to squeeze their
+cells, which is what phase 3 deferred.
+
+**Consequences:** A wide table scrolls with the keyboard as well as a pointer.
+The cost is a tab stop on a table narrow enough not to need one: whether a box
+overflows is knowable only at layout time, and removing the `tabIndex` when it
+does not would take client-side JavaScript on a page that otherwise ships none.
+A caption would name the region better than the literal "Table"; GFM tables have
+none to offer.
+
+---
+
+## 2026-09-13 — External links open in the same tab
+
+**Context:** `ExternalLink` is the registry's component for a link that leaves
+the site, and `MdxLink` routes every `https://` markdown link to it. Whether such
+a link opens in a new tab is a choice the specification does not make.
+
+**Decision:** the same tab. `rel="noopener noreferrer"` is set regardless, and a
+decorative `↗`, `aria-hidden`, marks the link visually. `MdxLink` sends `/…` to
+`next/link`, `http(s)` to `ExternalLink`, and leaves a fragment, a relative path
+or a `mailto:`/`tel:` scheme as a plain anchor.
+
+**Alternatives:** `target="_blank"` with a visually hidden "opens in a new tab",
+which is the common pattern but takes a decision that belongs to the reader;
+WCAG 2.2 §3.2.5 treats an unrequested new window as a change of context.
+
+**Consequences:** Flipping it later is two lines in one file, and the `rel` is
+already correct if anyone does. The arrow is `inline-block` so the link's
+underline stops before it; a screen reader hears the link text only, and an
+`↗` never appears on an email address.
+
+---
+
+## 2026-09-13 — `Figure` takes explicit dimensions; a markdown image is a plain `<img>`
+
+**Context:** Spec §21 asks for `next/image` "where practical" and for image use
+to sit behind a small `Figure` component, so that a static export would be a
+one-file change. `next/image` needs an intrinsic width and height to reserve
+space, and MDX files may not import the asset to have them inferred.
+
+**Decision:** `Figure` requires `src`, `alt`, `width` and `height`, and is the
+only place in the codebase that imports `next/image`. The `img` override renders
+a plain `<img loading="lazy" decoding="async">`, because markdown's
+`![alt](src)` carries no dimensions to give the optimizer.
+
+**Alternatives:** `width={0} height={0} sizes="100vw"` on `next/image`, which is
+a widely copied trick for unknown dimensions and reintroduces exactly the layout
+shift the dimensions exist to prevent. Or defaulting the dimensions, which
+silently distorts the first image whose aspect ratio differs.
+
+**Consequences:** An author writes `<Figure src="…" alt="…" width={1200}
+height={630} />` for an optimized, captioned image, and `![…](…)` for a quick
+one. `Figure`'s `sizes` describes the reading column rather than the viewport, so
+a wide screen does not fetch an image wider than the prose. No sample content
+uses it yet: the first editorial image is the first real exercise.
+
+---
+
+## 2026-09-13 — `Callout` has two variants and refuses a third
+
+**Context:** Spec §3.1 requires a visible placeholder callout at the top of every
+scaffolding file, written as `<Callout variant="warning">`. MDX is not
+type-checked, so the variant arrives as whatever the author typed.
+
+**Decision:** Two variants, `note` (the site accent) and `warning` (a
+`--color-warning` / `--color-warning-soft` pair added to `@theme`), each with a
+visible text label so the meaning does not depend on colour. An unknown variant
+throws an error naming the mistake and the alternatives. A `title` prop replaces
+the label, which is how the placeholder notices say "Placeholder content".
+
+**Alternatives:** A longer set — tip, caution, danger — invented before any
+content asks for one. Or falling back to `note` on an unknown variant, which
+would let `variant="warnign"` ship a warning styled as an aside.
+
+**Consequences:** The scaffolding placeholders are now `Callout`s rather than
+blockquotes, which is what spec §3.1 describes, and `tests/blog.test.ts` and
+`tests/learn.test.ts` assert that opening line. A typo in a variant fails the
+build. Adding a third variant is one entry in one map.
+
+---
+
+## 2026-09-13 — The demo registry ships empty, and every entry must be lazy
+
+**Context:** Phase 10 wires `components/learn/registry.ts` into the lesson
+route, but the two demos it will hold are phases 11 and 12. An MDX file naming a
+component that does not exist fails the build, and a placeholder demo would be
+agent-written scaffolding in component form (spec §3.1).
+
+**Decision:** `demoComponents` is exported empty, with the exact
+`dynamic(() => import(…))` form the next phases must use documented above it.
+`tests/mdx-registry.test.tsx` asserts that no demo name collides with a prose
+component, and reads the registry source to require `dynamic(` beside every key
+that is present — the rule holds vacuously today and bites the moment phase 11
+adds an eager import.
+
+**Alternatives:** A stub demo to make the lazy path observable now, which is
+content the author did not write. Or asserting laziness by inspecting the
+exported value, which cannot distinguish a `next/dynamic` component from an
+ordinary one.
+
+**Consequences:** Lesson pages render with `{ ...proseComponents,
+...demoComponents }`, built once at module scope, demos second so a demo cannot
+be shadowed. "Demo JavaScript loads only on the lessons that use a demo" is
+structurally guaranteed but not yet observable in a build; the first real
+measurement is phase 11. `ssr: false` is unavailable here in any case —
+`next/dynamic` rejects it inside a Server Component.
+
+---
+
+## 2026-09-13 — `validate:content` enforces that MDX files import nothing
+
+**Context:** "MDX files contain no imports" is a completion criterion of this
+phase and an architecture invariant in `CLAUDE.md`, but nothing failed when one
+appeared: `next-mdx-remote` strips `import` and `export` before compiling, so the
+statement vanishes and the component it named is simply undefined.
+
+**Decision:** `checkBody` in `lib/content/validate.ts` scans each content file
+for an `import`/`export` at the start of a line, outside frontmatter and outside
+code fences, and `scripts/validate-content.mjs` reports it beside the frontmatter
+issues. Severity follows the rule of spec §18: a published file fails, a draft
+warns.
+
+**Alternatives:** Checking in `lib/content/blog.ts` and `learn.ts` as each file
+is read, which would cost the check on every build of every page for a rule the
+`prebuild` gate already catches once. Or trusting review, which is what let the
+silent failure exist.
+
+**Consequences:** The report names the line the author's editor shows, because
+the check reads the whole file and skips the frontmatter rather than scanning
+gray-matter's body. A Python snippet may still `import numpy as np`: fences and
+indented code blocks are skipped. A statement hidden inside an unusual fence
+style would be missed — the check is a line scanner, not an MDX parser.

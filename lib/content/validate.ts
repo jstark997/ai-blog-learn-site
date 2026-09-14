@@ -1,6 +1,7 @@
 /**
- * Frontmatter validation, and the cross-file checks per-file validation cannot
- * see (spec §18).
+ * Frontmatter validation, the one body rule that is not a matter of taste — MDX
+ * files import nothing (spec §15) — and the cross-file checks per-file
+ * validation cannot see (spec §18).
  *
  * Two callers share this module. The content utilities validate lazily, one
  * file at a time, as the build reads them; `scripts/validate-content.mjs`
@@ -148,6 +149,67 @@ export function parseFrontmatter<Schema extends z.ZodType>(
 
   console.warn(`Skipping draft with invalid frontmatter:\n${formatIssue(result.issue)}`);
   return null;
+}
+
+/**
+ * A line that opens or closes a fenced code block — ``` or ~~~, optionally
+ * indented by up to three spaces, which is as far as markdown allows before the
+ * fence becomes an indented code block instead.
+ */
+const FENCE = /^ {0,3}(?:`{3,}|~{3,})/;
+
+/** An ES module statement at the start of a line, outside a code fence. */
+const MODULE_STATEMENT = /^ {0,3}(import|export)\b/;
+
+/** The frontmatter delimiter: the `---` fence gray-matter reads between. */
+const FRONTMATTER_DELIMITER = /^---\s*$/;
+
+/**
+ * MDX files import nothing (spec §15).
+ *
+ * The rule is not a style preference: `next-mdx-remote` strips `import` and
+ * `export` from the source before compiling it, so `import Chart from "./chart"`
+ * does not fail — it vanishes, and the component it named is then undefined when
+ * the page renders. Components reach content only by being named in a registry.
+ *
+ * Takes the whole file, so the line it reports is the line the author's editor
+ * shows. Frontmatter is skipped, as are code fences: a Python snippet in an
+ * article is free to say `import numpy as np`, and so is an indented code block,
+ * four spaces or more.
+ *
+ * Severity follows the same rule as frontmatter (spec §18): published content
+ * fails, a draft warns, because an unfinished draft must not block a deployment
+ * of everything else.
+ */
+export function checkBody(source: string, file: string, draft: boolean): ContentIssue | null {
+  const lines = source.split("\n");
+  const details: string[] = [];
+  let insideFrontmatter = FRONTMATTER_DELIMITER.test(lines[0] ?? "");
+  let insideFence = false;
+
+  for (const [index, line] of lines.entries()) {
+    if (insideFrontmatter) {
+      // The opening delimiter is line 0; the next one closes the block.
+      if (index > 0 && FRONTMATTER_DELIMITER.test(line)) insideFrontmatter = false;
+      continue;
+    }
+    if (FENCE.test(line)) {
+      insideFence = !insideFence;
+      continue;
+    }
+    if (insideFence) continue;
+
+    const match = MODULE_STATEMENT.exec(line);
+    if (match === null) continue;
+
+    details.push(
+      `body: Line ${index + 1} is an \`${match[1]}\` statement, which is stripped before the ` +
+        "MDX is compiled — a component reaches content by being named in a registry (spec §15)",
+    );
+  }
+
+  if (details.length === 0) return null;
+  return { file, severity: draft ? "warning" : "error", details };
 }
 
 /** A validated blog post, reduced to what the cross-file checks need. */
