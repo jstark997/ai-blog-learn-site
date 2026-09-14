@@ -1208,3 +1208,83 @@ development server the moment an author drafts a lesson another one depends on.
 **Consequences:** Titles cannot drift from the lessons they name. The
 unresolved case is a development-time signal rather than a broken published
 page, and phase 9's navigation reuses the same resolver shape.
+
+---
+
+## 2026-09-13 — Lesson navigation lives in `components/navigation/`
+
+**Context:** Phase 9 adds two navigation surfaces to a lesson page: the
+previous/next pager, which is server-rendered, and the topic lesson list, which
+needs a disclosure button below the sidebar breakpoint and is therefore a Client
+Component. Phase 8 decided that `components/lesson/` is the server-rendered
+Learn UI and that a directory name should answer "is this shipped to the
+browser?".
+
+**Decision:** Both go in `components/navigation/`, beside `MainNav`, `MobileNav`
+and `NavLink`: `LessonPager.tsx` and `TopicLessonNav.tsx`. That directory
+already holds navigation of both kinds, and its promise is about what a
+component is for rather than where it runs.
+
+**Alternatives:** Putting them in `components/lesson/`, which would place the
+first `"use client"` file in the directory phase 8 declared server-rendered, and
+leave a reader checking file by file. Or splitting them across both directories
+by rendering mode, which would separate two halves of one feature.
+
+**Consequences:** `components/lesson/` stays server-only and `components/learn/`
+stays empty until the first demo. Navigation generated from content sits next to
+navigation generated from `nav-links.ts`, and the two disclosures — site menu and
+lesson list — are visibly the same pattern.
+
+---
+
+## 2026-09-13 — One lesson list, with the breakpoint in CSS and the state in React
+
+**Context:** Spec §23 wants a topic-level lesson list as a sidebar on a wide
+screen and "the simplest accessible implementation" — a collapsible menu,
+dropdown or drawer — on a narrow one. The server cannot know the viewport, so
+the shape cannot be chosen during rendering.
+
+**Decision:** `TopicLessonNav` renders one nav for both. The toggle button is
+`lg:hidden` and the panel is `hidden lg:flex`, so above the breakpoint the list
+is always open and the button does not exist; below it, React's `isOpen` swaps
+`hidden` for `flex`. The current lesson carries `aria-current="page"`, and the
+link back to the topic overview sits above the toggle, visible in both shapes.
+
+**Alternatives:** Rendering the sidebar and the mobile menu as two elements, one
+hidden at each breakpoint, which duplicates every lesson title in the DOM and
+puts two navigation landmarks in the accessibility tree. Or reading the viewport
+with `matchMedia`, which makes the first paint a guess. Or `<details>`, which
+cannot be forced open on a wide screen without JavaScript anyway.
+
+**Consequences:** The collapsed panel is hidden by `display: none` from a
+utility class rather than by the `hidden` attribute — its links leave the tab
+order and the accessibility tree exactly the same way, but jsdom applies no
+stylesheet, so `tests/lesson-navigation.test.tsx` asserts the contract the
+breakpoint hangs on (`aria-expanded`, `aria-controls`, the display class and the
+keyboard) rather than querying whether a link is reachable. The real
+small-screen behaviour is a phase 18 human checkpoint.
+
+---
+
+## 2026-09-13 — `pnpm verify` derives adjacency itself rather than importing it
+
+**Context:** "Adjacency is automatic and correct at topic boundaries" is a
+completion criterion for phase 9, and the interesting case — a topic whose last
+published lesson is followed by a draft — only exists in a production build,
+where `pnpm test` cannot see it.
+
+**Decision:** `scripts/verify.mjs` now reads `order` from frontmatter, sorts each
+topic's published lessons itself, and asserts that every lesson page links its
+topic and its neighbours, with `rel="prev"` and `rel="next"` absent at the two
+ends of a topic. Assertions gained a `bodyIncludes` counterpart to
+`bodyExcludes` for it.
+
+**Alternatives:** Importing `getAdjacentLessons` into the script, which would
+check the renderer against the code that fed it and let one bug hide another —
+the reason the script already reads frontmatter directly rather than through
+`lib/content/`.
+
+**Consequences:** A pager that wrapped around, pointed at a draft or lost a
+neighbour fails the gate on the real HTML. The script now carries a second copy
+of the ordering rule (spec §13); a change to that rule has to be made in both
+places, which is the price of an independent oracle.

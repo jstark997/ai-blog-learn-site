@@ -38,6 +38,7 @@ const POLL_INTERVAL_MS = 250;
  * @property {string} path
  * @property {number} status
  * @property {string} description
+ * @property {string[]} [bodyIncludes] substrings the response must contain
  * @property {string[]} [bodyExcludes] substrings the response must not contain
  */
 
@@ -83,14 +84,36 @@ function lessonUrl({ topicId, lessonId }) {
 }
 
 /**
- * Every lesson in `content/learn/`, as `{ topicId, lessonId, draft }`.
+ * The lessons either side of one, derived here rather than imported so that the
+ * adjacency the pages render is checked against the frontmatter instead of
+ * against the same code that produced it (spec §13).
+ *
+ * `all` must already be filtered to what the environment shows: the server this
+ * script drives runs with `SHOW_DRAFTS=false`, so a draft is neither a
+ * neighbour nor has neighbours of its own.
+ */
+function neighbours(lesson, all) {
+  const ordered = all
+    .filter((candidate) => candidate.topicId === lesson.topicId)
+    .sort((a, b) => a.order - b.order || a.lessonId.localeCompare(b.lessonId));
+  const index = ordered.findIndex((candidate) => candidate.lessonId === lesson.lessonId);
+
+  return { previous: ordered[index - 1], next: ordered[index + 1] };
+}
+
+/**
+ * Every lesson in `content/learn/`, as `{ topicId, lessonId, order, draft }`.
  *
  * The tree is the data model: the directory is the topic and the filename is
  * the lesson (spec §11.1), so the route each entry must answer on is spelt out
  * by the path and nothing here consults frontmatter for it. Read directly, for
  * the same reason the posts are.
  *
- * @returns {Promise<{ topicId: string; lessonId: string; draft: boolean }[]>}
+ * `order` is the one field that has to be read, because previous/next are
+ * derived from it (spec §13) and this script has to derive them independently
+ * of the code that renders them.
+ *
+ * @returns {Promise<{ topicId: string; lessonId: string; order: number; draft: boolean }[]>}
  */
 async function lessons() {
   const topics = await readdir(LEARN_ROOT, { withFileTypes: true });
@@ -106,10 +129,12 @@ async function lessons() {
       return Promise.all(
         files.map(async (entry) => {
           const source = await readFile(path.join(LEARN_ROOT, topic.name, entry.name), "utf8");
+          const { data } = matter(source);
           return {
             topicId: topic.name,
             lessonId: entry.name.slice(0, -".mdx".length),
-            draft: matter(source).data.draft === true,
+            order: Number(data.order),
+            draft: data.draft === true,
           };
         }),
       );
@@ -192,11 +217,28 @@ async function assertions() {
       status: 404,
       description: "topic with nothing published in it",
     })),
-    ...publishedLessons.map((lesson) => ({
-      path: lessonUrl(lesson),
-      status: 200,
-      description: "published lesson",
-    })),
+    ...publishedLessons.map((lesson) => {
+      const { previous, next } = neighbours(lesson, publishedLessons);
+
+      return {
+        path: lessonUrl(lesson),
+        status: 200,
+        description: "published lesson, with its topic and its neighbours linked",
+        bodyIncludes: [
+          // The way back to the topic overview (spec §13). Quoted, because the
+          // topic URL is a prefix of every lesson URL beneath it.
+          `href="/learn/${lesson.topicId}"`,
+          ...(previous === undefined ? [] : [`href="${lessonUrl(previous)}"`, 'rel="prev"']),
+          ...(next === undefined ? [] : [`href="${lessonUrl(next)}"`, 'rel="next"']),
+        ],
+        bodyExcludes: [
+          ...hiddenLessonUrls,
+          // At a topic boundary the pager has one side and not two.
+          ...(previous === undefined ? ['rel="prev"'] : []),
+          ...(next === undefined ? ['rel="next"'] : []),
+        ],
+      };
+    }),
     ...draftLessons.map((lesson) => ({
       path: lessonUrl(lesson),
       status: 404,
@@ -285,20 +327,25 @@ async function main() {
   try {
     await waitForServer(baseUrl, server);
 
-    for (const { path, status, description, bodyExcludes = [] } of checks) {
+    for (const { path, status, description, bodyIncludes = [], bodyExcludes = [] } of checks) {
       const response = await fetch(`${baseUrl}${path}`, {
         redirect: "manual",
         signal: AbortSignal.timeout(15_000),
       });
-      const body = bodyExcludes.length > 0 ? await response.text() : "";
+      const inspectsBody = bodyIncludes.length > 0 || bodyExcludes.length > 0;
+      const body = inspectsBody ? await response.text() : "";
+      const missing = bodyIncludes.filter((required) => !body.includes(required));
       const leaked = bodyExcludes.filter((excluded) => body.includes(excluded));
 
-      const ok = response.status === status && leaked.length === 0;
+      const ok = response.status === status && missing.length === 0 && leaked.length === 0;
       console.log(
         `${ok ? "PASS" : "FAIL"}  ${path}  ${response.status} (expected ${status})  ${description}`,
       );
       if (response.status !== status) {
         failures.push(`${path}: expected ${status}, received ${response.status}`);
+      }
+      for (const required of missing) {
+        failures.push(`${path}: body must mention ${required}`);
       }
       for (const excluded of leaked) {
         failures.push(`${path}: body must not mention ${excluded}`);
