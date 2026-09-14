@@ -1440,3 +1440,140 @@ the check reads the whole file and skips the frontmatter rather than scanning
 gray-matter's body. A Python snippet may still `import numpy as np`: fences and
 indented code blocks are skipped. A statement hidden inside an unusual fence
 style would be missed — the check is a line scanner, not an MDX parser.
+
+---
+
+## 2026-09-13 — Plotting primitives are a frame, a scale module and free-standing marks
+
+**Context:** Phase 11 must build the activation explorer in SVG and "extract the
+axis, grid and curve primitives so the next phase reuses them" — but a gradient
+descent demo needs a *different* set of marks over the same axes, so the shape
+of the seam decides whether phase 12 reuses or rewrites.
+
+**Decision:** Three pieces under `components/learn/plot/`.
+`scale.ts` is pure arithmetic — `linearScale`, `ticks`, `sample`, `toPathData`,
+`formatNumber` — with no React in it. `Plot.tsx` draws the frame, grid, zero
+axes and tick labels into a fixed `viewBox`, and hands its children the two
+scales through a render prop rather than a context. `PlotMarks.tsx` holds the
+marks: `PlotCurve`, `PlotPolyline`, `PlotPoint`, `PlotGuides`, each taking the
+`scales` object explicitly.
+
+**Alternatives:** A context provider, which would force a hook and a client
+boundary into the frame itself. Or a single `<Plot data={…} />` that owns its
+marks, which turns every new kind of mark into a change to the frame.
+
+**Consequences:** `Plot` calls no hook and holds no state, so it renders on the
+server and only the demo above it is a Client Component. A fixed `viewBox`
+scaled by `w-full` means nothing is measured in the browser, but it also scales
+the tick labels, so a caller caps the width — the explorer uses `max-w-md`,
+which keeps labels between about 9 px and 15 px. Phase 12 adds no primitive it
+does not already have except whatever it needs for animation.
+
+---
+
+## 2026-09-13 — A value that cannot be drawn breaks the line rather than the plot
+
+**Context:** Phase 12 deliberately offers a learning rate large enough to
+diverge, and must not produce `NaN` in a readout or a broken layout. A single
+invalid number anywhere in an SVG `d` attribute makes the browser discard the
+entire path, so the failure mode is not a wrong picture but no picture.
+
+**Decision:** `toPathData` skips any point that does not project to two finite
+numbers and restarts the subpath with `M` at the next usable one; the marks
+first map anything outside the y domain to `NaN`, so leaving the frame and
+diverging are the same case. `formatNumber` renders the non-finite values as
+`undefined`, `∞` and `−∞` rather than letting `NaN` reach a readout.
+`PlotPoint` and `PlotGuides` render nothing when their point is off the plot.
+
+**Alternatives:** A `clipPath`, which needs an id — shared between two plots on
+one page it is invalid markup, and generated per plot it forces a hook into a
+component that otherwise needs none.
+
+**Consequences:** A curve that exits the frame stops at its last in-range
+sample rather than exactly at the edge; at the default 240 samples that gap is
+sub-pixel. `tests/plot.test.ts` covers the divergence cases now, before phase 12
+can produce them.
+
+---
+
+## 2026-09-13 — The demo writes its equation as text, not as typeset mathematics
+
+**Context:** The explorer must show the selected function's equation. KaTeX
+typesets the lesson's mathematics, but it runs in the MDX pipeline at build time
+(spec §20) and is not shipped to the browser; a client component that typeset
+its own equation would have to download the whole formula renderer to draw one
+line, against spec §30.
+
+**Decision:** Each entry in `components/learn/neural-networks/activations.ts`
+carries its definition as a plain string — `sigmoid(z) = 1 / (1 + exp(−z))` —
+rendered in the monospace face. `exp(-z)` is written out rather than
+superscripted because it survives being read aloud. The sign is a true minus
+(U+2212): it is the right character for mathematics, and unlike a hyphen a
+browser will not break a line after it, which is what stops `exp(−z)` splitting
+across two lines at 375 px.
+
+**Alternatives:** MathML, which is verbose to hand-write and adds a rendering
+path nothing else on the site uses. Or importing KaTeX into the client bundle.
+
+**Consequences:** The equation in the demo does not look like the `$$ … $$`
+block three paragraphs above it in the same lesson. That is a visible
+inconsistency and a candidate for the design checkpoint; the alternative is
+about 270 KB of client JavaScript per lesson that embeds a demo.
+
+---
+
+## 2026-09-13 — The demo is a labelled landmark, and its title is a paragraph
+
+**Context:** The explorer needs an accessible name, and the obvious way to give
+it one is a heading. But a demo is embedded in authored MDX at a heading level
+it cannot know, and `.prose h2` in `app/globals.css` would style and space it as
+a section title inside the demo's own card.
+
+**Decision:** `<section aria-labelledby>` pointing at a paragraph. The demo
+becomes a named `region`, which a screen-reader user can jump to — the opposite
+of the phase 10 decision that a `Callout` is *not* a landmark, and for the same
+reason: a lesson has one or two demos and may have six callouts.
+
+**Consequences:** The demo does not appear in the page's heading outline; the
+`##` the author writes above it does. Anything else the demo renders is
+similarly subject to the `.prose` rules, since it is a child of `.prose` — the
+current markup uses no element those rules target.
+
+---
+
+## 2026-09-13 — `dynamic()` in the demo registry does not split the lesson bundle
+
+**Context:** Spec §15 prescribes wrapping every demo in `next/dynamic` so that
+"its JavaScript loads only on the lessons that actually use it", and phase 10
+made that a completion criterion it could not yet measure. Phase 11 is the first
+build with a real demo in the registry, so it is the first measurement.
+
+**Decision:** Keep the prescribed form. The specification wins over the
+measurement, the structure is right, and the two causes of the shortfall are
+both outside this repository.
+
+**Discrepancy, measured:** the explorer's code reaches every lesson, not only
+the one that embeds it. Both lessons load an identical set of eight chunks, and
+rebuilding with a plain eager import in place of `dynamic()` produces the same
+per-page chunk lists and 2.6 KB *less* client JavaScript overall. Two causes:
+
+1. Next's own documentation states that "when a Server Component dynamically
+   imports a Client Component, automatic code splitting is currently not
+   supported". Every documented example of `dynamic()` producing a separate
+   client bundle has its call site inside a `"use client"` file, which
+   `components/learn/registry.ts` is not and cannot be.
+2. Turbopack's production chunker merges small chunks by default
+   (`minChunkSize` 50 000 bytes); the whole application's client code is about
+   26 KB, so it would be merged into one chunk even if step 1 split it.
+
+**What does hold:** the *registry split* works, which is the part spec §30 names
+explicitly. A blog article loads no demo code at all — the lesson chunk carrying
+the explorer appears on lesson pages and not on article pages.
+
+**Consequences:** "Demo JavaScript loads only on the lessons that use a demo" is
+not true today and should not be claimed. Revisiting it means either moving the
+`dynamic()` call site into a Client Component wrapper — which changes the
+architecture spec §15 fixes, and is not phase 11's to decide — or
+`experimental.turbopackChunking.generateComponentChunks`, which is documented as
+experimental and not recommended for production. Worth re-measuring when the
+demos are large enough for the difference to matter.
