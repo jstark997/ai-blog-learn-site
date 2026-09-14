@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // Eagerly validates every file under content/ — frontmatter against the Zod
-// schemas, plus the cross-file checks a single file cannot make about itself:
-// topic directory <-> topics.ts parity, `order` uniqueness within a topic,
-// prerequisite resolution and blog slug uniqueness (application spec §18).
+// schemas, the body rule that MDX files import nothing (spec §15), plus the
+// cross-file checks a single file cannot make about itself: topic directory
+// <-> topics.ts parity, `order` uniqueness within a topic, prerequisite
+// resolution and blog slug uniqueness (application spec §18).
 //
 // Exits non-zero when published content is invalid. Runs as `prebuild` and in
 // CI, so a broken post cannot reach a deployment. Invalid *drafts* warn and are
@@ -57,7 +58,8 @@ const TOPICS_MODULE = path.resolve(
 const load = (relativePath) =>
   import(pathToFileURL(path.resolve(REPOSITORY_ROOT, relativePath)).href);
 const { blogPostSchema, lessonSchema } = await load("lib/content/schemas.ts");
-const { checkFrontmatter, crossFileIssues, formatIssue } = await load("lib/content/validate.ts");
+const { checkBody, checkFrontmatter, crossFileIssues, formatIssue, isDraftFrontmatter } =
+  await load("lib/content/validate.ts");
 
 const gray = await import("gray-matter");
 const matter = gray.default;
@@ -78,11 +80,11 @@ async function readDirectory(directory) {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** Reads one file's frontmatter, or reports why it could not be read. */
-async function readFrontmatter(file) {
+/** Reads one file's frontmatter and its source, or reports why it could not be read. */
+async function readContentFile(file) {
   const source = await readFile(file, "utf8");
   try {
-    return { ok: true, data: matter(source).data };
+    return { ok: true, data: matter(source).data, source };
   } catch (error) {
     return {
       ok: false,
@@ -107,13 +109,21 @@ const report = (file, severity, detail) =>
 /** Validates one content file and returns its metadata, or null if invalid. */
 async function validateFile(file, schema) {
   filesChecked += 1;
-  const frontmatter = await readFrontmatter(file);
-  if (!frontmatter.ok) {
-    issues.push(frontmatter.issue);
+  const contentFile = await readContentFile(file);
+  if (!contentFile.ok) {
+    issues.push(contentFile.issue);
     return null;
   }
 
-  const result = checkFrontmatter(schema, frontmatter.data, display(file));
+  // The body rule is reported alongside the frontmatter ones rather than
+  // instead of them: an author fixing one file should see everything wrong with
+  // it in a single run. Draft status is read from the raw frontmatter, so a
+  // draft still only warns even when its metadata is what is broken.
+  const draft = isDraftFrontmatter(contentFile.data);
+  const bodyIssue = checkBody(contentFile.source, display(file), draft);
+  if (bodyIssue !== null) issues.push(bodyIssue);
+
+  const result = checkFrontmatter(schema, contentFile.data, display(file));
   if (result.ok) return result.metadata;
 
   issues.push(result.issue);

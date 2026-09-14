@@ -9,20 +9,27 @@ tags:
 draft: false
 ---
 
-> **Placeholder content.** Scaffolding written by a coding agent (spec §3.1),
-> not editorial writing. The second published post exists so the blog index has
-> more than one entry to order, and so an article page can be seen rendering
-> mathematics and highlighted code.
+<Callout variant="warning" title="Placeholder content">
+
+Scaffolding written by a coding agent (spec §3.1), not editorial writing. The
+second published post exists so the blog index has more than one entry to order,
+and so an article page can be seen rendering mathematics and highlighted code.
+
+</Callout>
 
 Scaled dot-product attention is a weighted average over values, where the
 weights come from the compatibility of a query with each key:
+
+<Equation label="(1)" caption="Scaled dot-product attention: the softmax of scaled query-key products, used to average the values.">
 
 $$
 \operatorname{Attention}(Q, K, V) = \operatorname{softmax}\!\left(\frac{Q K^{\top}}{\sqrt{d_k}}\right) V
 $$
 
-The $\sqrt{d_k}$ term keeps the logits from growing with the key dimension, so
-the softmax does not saturate.
+</Equation>
+
+The $\sqrt{d_k}$ term in (1) keeps the logits from growing with the key
+dimension, so the softmax does not saturate.
 
 ## In code
 

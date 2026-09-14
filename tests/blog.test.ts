@@ -296,7 +296,11 @@ describe("content/blog", () => {
     const { getAllBlogPosts } = await blogWithDrafts(true);
 
     for (const entry of await getAllBlogPosts()) {
-      expect(entry.content.trimStart().startsWith("> **Placeholder content.**")).toBe(true);
+      // The placeholder is the `Callout` of the prose registry (spec §15, §3.1),
+      // opening the file so it cannot be scrolled past.
+      expect(entry.content.trimStart()).toMatch(
+        /^<Callout variant="warning" title="Placeholder content">/,
+      );
     }
   });
 });

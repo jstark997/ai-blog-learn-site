@@ -73,6 +73,12 @@
   --color-accent: light-dark(oklch(50% 0.155 258), oklch(80% 0.11 250));
   --color-accent-soft: light-dark(oklch(95.5% 0.025 258), oklch(27% 0.045 258));
   --color-on-accent: light-dark(oklch(99% 0.003 255), oklch(17.5% 0.012 260));
+
+  /* The one non-accent semantic pair: a warning, used by the `warning` variant
+     of the MDX `Callout` (spec §15) and by the placeholder notices spec §3.1
+     requires on scaffolding content. Same `light-dark()` rule as the rest. */
+  --color-warning: light-dark(oklch(52% 0.13 70), oklch(82% 0.11 80));
+  --color-warning-soft: light-dark(oklch(96.5% 0.035 85), oklch(27% 0.05 70));
 }
 
 @layer base {
@@ -111,8 +117,8 @@
    Rendered MDX (application spec §19, §20, §27)
    ---------------------------------------------------------------------------
    `.prose` styles the HTML the MDX pipeline emits — the elements no React
-   component intercepts. The registry components of phase 10 override
-   individual tags; everything else lands here.
+   component intercepts. The prose registry (spec §15) overrides `a`, `img` and
+   `table` with components; every other tag lands here.
 
    Code blocks and mathematics are the parts this phase owns:
 
@@ -224,10 +230,11 @@
   }
 
   /* The table stays a table: `display: block` would make it scroll, but it
-     also drops the table role in some screen readers. A wide table wraps
-     inside its cells for now; the scrollable wrapper that keeps both the
-     semantics and the scrolling belongs to the `table` override in the prose
-     registry (phase 10). */
+     also drops the table role in some screen readers. The scrolling lives on
+     the wrapper the `table` override in the prose registry renders around it
+     (`components/mdx/MdxTable.tsx`), so a table too wide to fit — a long code
+     string in a cell, say — scrolls inside its own box instead of widening the
+     reading column. Cells still wrap first; the wrapper catches what is left. */
   .prose table {
     width: 100%;
     border-collapse: collapse;

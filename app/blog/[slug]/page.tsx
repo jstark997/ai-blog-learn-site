@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { PostMeta } from "@/components/blog/PostMeta";
 import { DraftBadge } from "@/components/content/DraftBadge";
 import { Container } from "@/components/layout/Container";
+import { proseComponents } from "@/components/mdx/registry";
 import { getAllBlogPosts, getBlogPostBySlug } from "@/lib/content/blog";
 import { renderMdx } from "@/lib/content/mdx";
 
@@ -52,9 +53,11 @@ export async function generateMetadata({
  * does not exist *and* for a draft while drafts are hidden, so both 404 through
  * the same guard.
  *
- * The MDX body is compiled here, on the server, at build time. It renders with
- * no component registry yet: `proseComponents` arrives in phase 10 (spec §15),
- * and demos never reach a blog page.
+ * The MDX body is compiled here, on the server, at build time, with the prose
+ * registry and nothing else (spec §15). An article may therefore use `Callout`,
+ * `Figure`, `Equation` and `ExternalLink`; a demo is not in scope on a blog
+ * page, is absent from this registry, and naming one here would fail the build
+ * rather than ship an interactive component to an article.
  */
 export default async function BlogPostPage({ params }: PageProps<"/blog/[slug]">) {
   const { slug } = await params;
@@ -62,7 +65,7 @@ export default async function BlogPostPage({ params }: PageProps<"/blog/[slug]">
   if (post === null) notFound();
 
   const { metadata } = post;
-  const content = await renderMdx({ source: post.content });
+  const content = await renderMdx({ source: post.content, components: proseComponents });
 
   return (
     <Container width="prose">

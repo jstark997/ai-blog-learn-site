@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { blogPostSchema, lessonSchema } from "@/lib/content/schemas";
 import {
   ContentValidationError,
+  checkBody,
   checkFrontmatter,
   crossFileIssues,
   formatIssue,
@@ -133,6 +134,64 @@ describe("parseFrontmatter", () => {
 
     expect(parseFrontmatter(lessonSchema, lesson(), "content/learn/nn/a.mdx")?.order).toBe(10);
     expect(warn).not.toHaveBeenCalled();
+  });
+});
+
+describe("checkBody", () => {
+  const file = "content/blog/a.mdx";
+
+  const mdx = (...body: string[]) =>
+    ["---", 'title: "A post"', "---", "", ...body].join("\n");
+
+  it("passes a file that imports nothing", () => {
+    expect(checkBody(mdx("Prose, and <Callout>a component</Callout>."), file, false)).toBeNull();
+  });
+
+  it("fails a published file that imports, naming the line the author sees", () => {
+    const issue = checkBody(mdx('import Chart from "./chart";', "", "Prose."), file, false);
+
+    expect(issue?.severity).toBe("error");
+    // Line 5: the three frontmatter lines, the blank line, then the statement.
+    expect(issue?.details).toEqual([expect.stringContaining("Line 5")]);
+    expect(issue?.details[0]).toContain("registry");
+  });
+
+  it("catches an export too, since it is stripped just as silently", () => {
+    const issue = checkBody(mdx("export const meta = 1;"), file, false);
+
+    expect(issue?.details).toHaveLength(1);
+  });
+
+  it("warns rather than fails for a draft, as invalid frontmatter does", () => {
+    expect(checkBody(mdx('import "./x";'), file, true)?.severity).toBe("warning");
+  });
+
+  it("leaves code alone: a Python snippet may import numpy", () => {
+    expect(
+      checkBody(
+        mdx("```python", "import numpy as np", "```", "", "    import indented_is_code_too", ""),
+        file,
+        false,
+      ),
+    ).toBeNull();
+  });
+
+  it("sees a statement after a fence has closed", () => {
+    const issue = checkBody(mdx("```js", "import a from 'a';", "```", "", "import b from 'b';"), file, false);
+
+    expect(issue?.details).toEqual([expect.stringContaining("Line 9")]);
+  });
+
+  it("ignores frontmatter, which is YAML and not a module", () => {
+    const source = ["---", 'title: "A post"', "export: true", "---", "", "Prose."].join("\n");
+
+    expect(checkBody(source, file, false)).toBeNull();
+  });
+
+  it("reports every offending line at once", () => {
+    const issue = checkBody(mdx('import "./a";', 'import "./b";'), file, false);
+
+    expect(issue?.details).toHaveLength(2);
   });
 });
 
