@@ -1577,3 +1577,66 @@ architecture spec §15 fixes, and is not phase 11's to decide — or
 `experimental.turbopackChunking.generateComponentChunks`, which is documented as
 experimental and not recommended for production. Worth re-measuring when the
 demos are large enough for the difference to matter.
+
+---
+
+## 2026-09-13 — A run stops itself: divergence is bounded, not computed to `NaN`
+
+**Context:** Phase 12 requires a learning rate large enough to diverge, and
+requires the readout not to show `NaN`. For `f(x) = x²` the step is
+`x ← x(1 − 2η)`, so η > 1 grows without bound; iterate far enough and `x`
+reaches `Infinity`, at which point the next step computes `∞ − ∞` and every
+number on screen becomes `NaN`.
+
+**Decision:** The run's status is derived from the path, in one place
+(`statusOf` in `gradientDescent.ts`), and `extendPath` refuses to step a run
+that is not `"stepping"`. A run ends as `converged` (|x| < 0.001), `diverged`
+(|x| > 1000), or `exhausted` (80 steps). The demo reads the status during
+render, so the buttons, the message and the arithmetic cannot disagree about
+whether the run is over.
+
+**Consequences:** The readout always holds a finite number; divergence is shown
+by a figure in the millions and a marker that has left the plot, not by `∞`.
+The bounds are also what makes "start" terminate: the slowest rate the slider
+offers, η = 0.05, converges in about 73 steps, inside the budget.
+
+---
+
+## 2026-09-13 — Reduced motion replaces the animation rather than disabling the control
+
+**Context:** The demo animates a run at one step every 220 ms. Spec §14.1 and
+the phase both require that stepping work without animation, and that animation
+respect `prefers-reduced-motion`.
+
+**Decision:** `usePrefersReducedMotion` reads the media query through
+`useSyncExternalStore` — the store *is* the query, so there is no copy in state
+to fall out of step and a reader who changes the setting mid-page sees the demo
+change with it. Under reduced motion the primary button becomes "Run to the
+end" and applies the whole run in one state update; no timer is started. Step
+and reset are unaffected.
+
+**Consequences:** jsdom implements no media queries and therefore has no
+`matchMedia` at all, so `tests/setup.ts` now stubs the "no preference" answer;
+the reduced-motion test replaces the stub. The server snapshot is `false`,
+which is the only honest default — server-rendered HTML cannot know the
+preference, and a demo that animates nothing until asked is still fully
+operable.
+
+---
+
+## 2026-09-13 — The live region is silent while a run is animating
+
+**Context:** The demo's state readout is a live region (spec §14.1). Animating
+eighty steps through a polite live region would announce eighty times.
+
+**Decision:** The visible readout is `aria-hidden` — the sighted reader's copy,
+the same pattern the sliders use for their values — and a visually hidden
+`aria-live="polite"` paragraph carries the text. While the timer is running it
+says only "Running."; when the run pauses, converges or diverges, the full
+state is announced once.
+
+**Consequences:** A screen-reader user hears where a run *ended*, not every
+step of it, and manual stepping still announces each step. Two nodes carry the
+same text when the demo is idle, which the tests assert stay equal — a demo
+that told a screen reader something other than what it showed would be worse
+than either alone.
