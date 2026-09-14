@@ -12,8 +12,7 @@ draft: false
 <Callout variant="warning" title="Placeholder content">
 
 Scaffolding written by a coding agent (spec §3.1), not editorial writing. The
-Activation Function Explorer is embedded here in a later phase; until then this
-lesson carries prose, mathematics and a code block only.
+Activation Function Explorer below is real; the prose around it is not.
 
 </Callout>
 
@@ -44,5 +43,11 @@ const sigmoid: Activation = (z) => 1 / (1 + Math.exp(-z));
 const tanh: Activation = Math.tanh;
 ```
 
-A real lesson would let the reader move a slider and watch the curve and its
-derivative together. That demonstration arrives with the interactive components.
+## Move the input
+
+Choose a function and drag the input. ReLU passes a positive input through
+unchanged and flattens everything below zero; the sigmoid and tanh curves bend
+towards their asymptotes, and the output stops responding to the input well
+before the slider reaches either end.
+
+<ActivationFunctionExplorer />

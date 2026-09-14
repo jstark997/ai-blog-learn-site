@@ -15,20 +15,15 @@
  * The demos are Client Components; the `"use client"` directive belongs in each
  * demo file, not in this one.
  *
- * Phases 11 and 12 fill this in, each demo in the form:
- *
- * ```ts
- * export const demoComponents = {
- *   ActivationFunctionExplorer: dynamic(
- *     () => import("@/components/learn/neural-networks/ActivationFunctionExplorer"),
- *   ),
- * } satisfies MdxComponents;
- * ```
- *
- * It is empty until then, and deliberately so: a placeholder demo would be
- * scaffolding prose in component form (spec §3.1), and an MDX file naming a demo
- * that does not exist yet fails the build, which is the intended behaviour.
+ * Each demo therefore needs a default export, which is what `import()` resolves
+ * to here. `GradientDescentDemo` joins it in phase 12.
  */
+import dynamic from "next/dynamic";
+
 import type { MdxComponents } from "@/lib/content/mdx";
 
-export const demoComponents = {} satisfies MdxComponents;
+export const demoComponents = {
+  ActivationFunctionExplorer: dynamic(
+    () => import("@/components/learn/neural-networks/ActivationFunctionExplorer"),
+  ),
+} satisfies MdxComponents;
