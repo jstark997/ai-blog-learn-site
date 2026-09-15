@@ -1,16 +1,17 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 
 import { Container } from "@/components/layout/Container";
 import { LessonList } from "@/components/lesson/LessonList";
 import { getAllLessons } from "@/lib/content/learn";
 import { learningTopics } from "@/lib/content/topics";
+import { pageMetadata } from "@/lib/seo";
 import { site } from "@/lib/site";
 
-export const metadata: Metadata = {
+export const metadata = pageMetadata({
+  path: "/learn",
   title: "Learn",
   description: site.learnDescription,
-};
+});
 
 /**
  * The Learn index (spec §11.1): every visible lesson, grouped by topic in

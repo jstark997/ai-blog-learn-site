@@ -6,7 +6,15 @@ import { HomeSection } from "@/components/home/HomeSection";
 import { Container } from "@/components/layout/Container";
 import { LessonList } from "@/components/lesson/LessonList";
 import { getFeaturedLessons, getRecentPosts } from "@/lib/content/homepage";
+import { pageMetadata } from "@/lib/seo";
 import { site } from "@/lib/site";
+
+/**
+ * No `title`: the homepage wants the root layout's `title.default`, which is
+ * the site's name. Giving it one would put that name through the `%s · site`
+ * template and print it twice (spec §25).
+ */
+export const metadata = pageMetadata({ path: "/", description: site.description });
 
 /**
  * The homepage (spec §8): the hero, the most recent posts, the featured

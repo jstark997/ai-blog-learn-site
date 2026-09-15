@@ -3,7 +3,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 
 import { SiteFooter } from "@/components/layout/SiteFooter";
 import { SiteHeader } from "@/components/layout/SiteHeader";
-import { site } from "@/lib/site";
+import { FEED_PATH } from "@/lib/seo";
+import { site, siteUrl } from "@/lib/site";
 
 // KaTeX typesets the mathematics at build time; this is the stylesheet its
 // output needs. Imported once, here, for the whole site (spec §20).
@@ -20,12 +21,26 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+/**
+ * Site-wide metadata (spec §25). Every route then overrides what is its own
+ * through `pageMetadata`, which replaces `alternates` and `openGraph` whole —
+ * Next merges metadata shallowly, so a nested object set here is inherited
+ * only by a page that sets none of its own.
+ *
+ * `metadataBase` is the reason a route can write `canonical: "/blog"` instead
+ * of pasting the origin in: Next resolves every relative URL in metadata
+ * against it (spec §25).
+ */
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: {
     default: site.name,
     template: `%s · ${site.name}`,
   },
   description: site.description,
+  // The feed, for a page that declares no alternates of its own — the 404,
+  // in practice. Every real page repeats it through `pageMetadata`.
+  alternates: { types: { "application/rss+xml": FEED_PATH } },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

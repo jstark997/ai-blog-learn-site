@@ -23,6 +23,9 @@ export type ContentEntry = {
   url: string;
   title: string;
   draft: boolean;
+  /** `YYYY-MM-DD`; a bare YAML date parses as a `Date`, so both are normalised. */
+  publishedAt: string;
+  updatedAt?: string;
 };
 
 export type LessonEntry = ContentEntry & { topicId: string; lessonId: string };
@@ -34,6 +37,17 @@ function isContentFile(name: string): boolean {
 
 async function frontmatterOf(file: string): Promise<Record<string, unknown>> {
   return matter(await readFile(file, "utf8")).data;
+}
+
+/**
+ * A frontmatter date as `YYYY-MM-DD`, whether it was quoted in the file or left
+ * bare for YAML to parse into a `Date`. The same normalisation
+ * `lib/content/schemas.ts` performs — done again here, because the point of
+ * this module is to answer from the file rather than from the code under test.
+ */
+function isoDate(value: unknown): string | undefined {
+  if (value === undefined || value === null) return undefined;
+  return new Date(value as string | Date).toISOString().slice(0, 10);
 }
 
 /** Every post in `content/blog/`; the filename is the slug (spec §9.2). */
@@ -51,6 +65,8 @@ export async function blogEntries(): Promise<ContentEntry[]> {
           url: `/blog/${entry.name.slice(0, -".mdx".length)}`,
           title: String(data.title),
           draft: data.draft === true,
+          publishedAt: isoDate(data.publishedAt) ?? "",
+          updatedAt: isoDate(data.updatedAt),
         };
       }),
   );
@@ -83,6 +99,8 @@ export async function lessonEntries(): Promise<LessonEntry[]> {
                 url: `/learn/${topic.name}/${lessonId}`,
                 title: String(data.title),
                 draft: data.draft === true,
+                publishedAt: isoDate(data.publishedAt) ?? "",
+                updatedAt: isoDate(data.updatedAt),
               };
             }),
         );

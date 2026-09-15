@@ -1940,3 +1940,162 @@ so churn from a Next upgrade lands in a generated file. Hand-written notes in
 `AGENTS.md` must stay outside the markers. If a future Next version drops the
 `AGENTS.md` preference, the block returns to `CLAUDE.md` and this needs
 revisiting.
+
+---
+
+## 2026-09-14 — One site URL, resolved once, and a build that stops on a bad one
+
+**Context:** Spec §25 asks for a single `NEXT_PUBLIC_SITE_URL` behind metadata,
+the sitemap and the feed. Phase 11 left a note in this log saying to put it in
+`lib/site.ts` when the time came.
+
+**Decision:** `lib/site.ts` exports `siteUrl` and `absoluteUrl(path)`.
+`siteUrl` is read once at module scope, trailing slashes stripped, defaulting to
+`http://localhost:3000` so `pnpm dev`, `pnpm build` and the suite all work with
+no environment at all. A value that is not an absolute `http`/`https` URL throws
+with the offending text quoted, rather than being patched up. `absoluteUrl`
+takes a route path, insists on the leading slash, and resolves `/` to the bare
+origin — the same way Next resolves a relative metadata field against
+`metadataBase`, so a canonical link and a sitemap entry for the homepage agree
+character for character.
+
+`process.env.NEXT_PUBLIC_SITE_URL` is read as a whole member expression. Next
+substitutes that text at build time and destructuring would defeat it.
+
+**Alternatives:** Falling back to `VERCEL_URL` was rejected — reading it would
+put a deployment-platform variable outside `lib/content/env.ts`, which the draft
+audit forbids, and a preview's own hostname is not the canonical one anyway.
+Silently repairing a malformed value was rejected: metadata built on a broken
+base is wrong on every page and says nothing about it.
+
+**Consequences:** Deployment must set the variable (phase 21). A production
+build that forgets it emits canonical URLs pointing at localhost — visible in
+`pnpm verify` output, but not a failure, because the local default is what keeps
+the build working everywhere else.
+
+---
+
+## 2026-09-14 — Page metadata is assembled in one function
+
+**Context:** Seven route types need a unique title, a description from content,
+a canonical URL and Open Graph tags that agree with all three (spec §25).
+Written out seven times, the canonical link goes missing from one route and
+nobody notices.
+
+**Decision:** `lib/seo.ts` exports `pageMetadata({ path, title, description,
+article, draft })` and every route calls it. Paths are passed *relative* and
+resolved by Next against the `metadataBase` set in the root layout, so nothing
+but `lib/site.ts` knows the origin. The homepage passes no `title`, so the root
+layout's `title.default` applies rather than the site's name going through the
+`%s · site` template twice. `article` switches Open Graph from `website` to
+`article` and carries the publication and modification dates; `draft` is the
+`noindex` phase 11 already emitted, moved into the shared function.
+
+Metadata merges shallowly in Next — a nested object in a child replaces the
+parent's outright — so `pageMetadata` always emits `alternates` and `openGraph`
+whole, including the `application/rss+xml` alternate that advertises the feed
+from every page.
+
+**Alternatives:** Setting `alternates` and `openGraph` once in the root layout
+and overriding only the title was rejected on those merge semantics: the first
+route to set a canonical URL would have dropped the feed link from its head.
+
+**Consequences:** `tests/seo.test.ts` checks the four completion criteria across
+every generated route at once, because there is one shape to check. A new route
+type gets its metadata right by calling one function.
+
+---
+
+## 2026-09-14 — The sitemap and the feed exclude drafts unconditionally
+
+**Context:** `showDrafts` is true on a preview deployment, deliberately (spec
+§16, §33). The content utilities therefore *return* drafts there, and a sitemap
+built from `getAllBlogPosts()` alone would list them. Spec §25 says drafts must
+be excluded from all three outputs, full stop.
+
+**Decision:** `app/sitemap.ts` and `lib/feed.ts` each filter `!draft` on top of
+whatever the environment already did. A sitemap is an instruction to a crawler
+rather than a page, and an unfinished post has no business in one whatever
+environment generated it. The feed applies the filter inside `buildRssFeed`
+rather than at its caller, so the rule travels with the feed.
+
+This is not a second implementation of the draft rule: neither file reads
+`NODE_ENV`, `VERCEL_ENV` or `SHOW_DRAFTS`, and the draft audit's
+"one implementation" check still passes. It is a stricter rule for two
+crawler-facing artefacts.
+
+**Alternatives:** Trusting `showDrafts` was rejected — correct in production,
+wrong on exactly the deployment where drafts exist. Making `robots.txt` disallow
+everything on previews was rejected as the wrong tool: `Disallow` stops the
+crawl but leaves a linked URL indexable, and the `noindex` those pages already
+carry is the directive that actually works.
+
+**Consequences:** `tests/seo-drafts.test.ts` runs with `SHOW_DRAFTS=true` to
+exercise these filters, because the draft audit and `pnpm verify` both run with
+drafts off and would never reach them.
+
+---
+
+## 2026-09-14 — RSS 2.0, summaries only, and built in `lib/feed.ts`
+
+**Context:** Spec §25 makes a feed of published posts a Phase 1 requirement and
+the completion criterion is that `/rss.xml` is well-formed XML.
+
+**Decision:** RSS 2.0 with the Atom self-link validators expect, served from
+`app/rss.xml/route.ts` with `export const dynamic = "force-static"` — `GET`
+handlers are dynamic by default from Next 15 onwards, and every input here is a
+checked-in `.mdx` file. Items carry title, link, a permalink `guid`, `pubDate`,
+the frontmatter description and one `category` per tag. The body is the
+description, not the prose: compiling every post's MDX to build a feed is a cost
+this site has no reason to pay, and a summary feed is a legitimate feed.
+
+The XML is built in `lib/feed.ts`, not in the route. A route module may export
+only handlers and segment config, so a helper defined there could not be
+exported — and `escapeXml` is the one function in this phase where a mistake
+corrupts the whole document rather than one field.
+
+Nothing in the output depends on the moment of the build: `lastBuildDate` is the
+newest post's date, so two builds of the same content produce the same bytes.
+
+**Alternatives:** Atom was rejected for no reason beyond reach — RSS is what
+readers of a technical blog subscribe with. A `<managingEditor>` was left out
+because RSS wants an email address there and the site does not publish one.
+
+**Consequences:** `tests/feed.test.ts` parses every document it builds with
+`DOMParser` under jsdom, so "well-formed" is asserted by a parser rather than by
+a regular expression. The escaping case is built from synthetic posts, because
+the sample content contains no ampersand to trip over.
+
+---
+
+## 2026-09-14 — What the sitemap says, and what it declines to say
+
+**Context:** `MetadataRoute.Sitemap` offers `lastModified`, `changeFrequency`
+and `priority`.
+
+**Decision:** Only `lastModified`, and it comes from the content —
+`updatedAt ?? publishedAt` for a post or lesson, the newest of a topic's lessons
+for a topic page, the newest of everything for the homepage. `changeFrequency`
+and `priority` are omitted: Google ignores both, and a number nobody maintains
+is worse than a field nobody set.
+
+Topic pages are listed only where a published lesson exists, matching the rule
+that a topic with nothing published in it has no page at all.
+
+**Alternatives:** `lastModified: new Date()` was rejected — it would make the
+sitemap differ between two builds of identical content and tell a crawler
+everything changed on every deploy.
+
+**Consequences:** `pnpm verify` now also asserts `/robots.txt` returns 200 and
+names the sitemap, that each URL listing *contains* every published post rather
+than only excluding the drafts — a sitemap listing nothing would have passed the
+old check perfectly — and that the sitemap covers the lessons, topics and about
+page too.
+
+The phase 15 discovery mechanism worked as intended: writing `app/sitemap.ts`
+and `app/rss.xml/route.ts` added them to the draft audit and to `pnpm verify`
+with no edit to either file, and no third filename escaped the two globs.
+
+There is no `og:image`. The specification does not ask for one, and a social
+card is a design artefact the author has to make; adding a generated one would
+be the agent choosing the site's visual identity.

@@ -1,14 +1,14 @@
-import type { Metadata } from "next";
-
 import { PostList } from "@/components/blog/PostList";
 import { Container } from "@/components/layout/Container";
 import { getAllBlogPosts } from "@/lib/content/blog";
+import { pageMetadata } from "@/lib/seo";
 import { site } from "@/lib/site";
 
-export const metadata: Metadata = {
+export const metadata = pageMetadata({
+  path: "/blog",
   title: "Blog",
   description: site.blogDescription,
-};
+});
 
 /**
  * The blog index (spec §9.1): every post `getAllBlogPosts` returns, newest

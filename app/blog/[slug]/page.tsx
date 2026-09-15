@@ -7,6 +7,7 @@ import { Container } from "@/components/layout/Container";
 import { proseComponents } from "@/components/mdx/registry";
 import { getAllBlogPosts, getBlogPostBySlug } from "@/lib/content/blog";
 import { renderMdx } from "@/lib/content/mdx";
+import { pageMetadata } from "@/lib/seo";
 
 /**
  * Only the slugs `generateStaticParams` returns may be rendered. Next defaults
@@ -30,22 +31,19 @@ export async function generateMetadata({
   if (post === null) return {};
 
   const { metadata } = post;
-  return {
+  return pageMetadata({
+    path: `/blog/${slug}`,
     title: metadata.title,
     description: metadata.description,
     // A visible draft is on a preview deployment or a development server; it is
-    // still not something a crawler should index. Canonical URLs, the sitemap
-    // and the feed are phase 16 (spec §25).
-    robots: metadata.draft ? { index: false, follow: false } : undefined,
-    openGraph: {
-      type: "article",
-      title: metadata.title,
-      description: metadata.description,
-      publishedTime: metadata.publishedAt,
-      modifiedTime: metadata.updatedAt,
+    // still not something a crawler should index (spec §16).
+    draft: metadata.draft,
+    article: {
+      publishedAt: metadata.publishedAt,
+      updatedAt: metadata.updatedAt,
       tags: metadata.tags,
     },
-  };
+  });
 }
 
 /**

@@ -18,6 +18,7 @@ import {
 } from "@/lib/content/learn";
 import { renderMdx } from "@/lib/content/mdx";
 import { getTopic } from "@/lib/content/topics";
+import { pageMetadata } from "@/lib/seo";
 
 /**
  * What a lesson's MDX may use (spec §15): the prose components every page has,
@@ -54,21 +55,15 @@ export async function generateMetadata({
   if (lesson === null) return {};
 
   const { metadata } = lesson;
-  return {
+  return pageMetadata({
+    path: `/learn/${topicId}/${lessonId}`,
     title: metadata.title,
     description: metadata.description,
     // A visible draft is on a preview deployment or a development server; it is
-    // still not something a crawler should index. Canonical URLs, the sitemap
-    // and the feed are phase 16 (spec §25).
-    robots: metadata.draft ? { index: false, follow: false } : undefined,
-    openGraph: {
-      type: "article",
-      title: metadata.title,
-      description: metadata.description,
-      publishedTime: metadata.publishedAt,
-      modifiedTime: metadata.updatedAt,
-    },
-  };
+    // still not something a crawler should index (spec §16).
+    draft: metadata.draft,
+    article: { publishedAt: metadata.publishedAt, updatedAt: metadata.updatedAt },
+  });
 }
 
 /**

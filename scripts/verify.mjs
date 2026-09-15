@@ -10,8 +10,9 @@
 // *production* draft behaviour whatever the ambient environment says (spec §16).
 // The draft assertions are the same ones `tests/draft-audit.test.ts` makes
 // in-process; this is the end-to-end half — real status codes off a real
-// server. The sitemap and the RSS feed are phase 16 and are picked up by
-// `urlListingPaths()` below as soon as their route files exist.
+// server. `urlListingPaths()` finds the sitemap and the RSS feed by filename,
+// so each one is checked for the drafts it must not carry and the published
+// posts it must (spec §25).
 //
 // Never run `next start` in the foreground from an agent session; use this.
 
@@ -184,13 +185,13 @@ async function aboutPageMarkers() {
 
 /**
  * The URLs of the route modules that publish a list of URLs rather than a page:
- * the sitemap and any XML feed (spec §25). Both belong to phase 16.
+ * the sitemap and any XML feed (spec §25).
  *
- * Discovered from the `app/` tree rather than listed, so the draft assertions
- * reach them on the day they are written. `app/sitemap.ts` is served at
- * `/sitemap.xml`; a route handler under `app/<name>.xml/` is served at
- * `/<name>.xml`. `tests/draft-audit.test.ts` finds the same files with a glob
- * and asserts the same thing against their output.
+ * Discovered from the `app/` tree rather than listed, so a second feed is
+ * covered the day it is written. `app/sitemap.ts` is served at `/sitemap.xml`;
+ * a route handler under `app/<name>.xml/` is served at `/<name>.xml`.
+ * `tests/draft-audit.test.ts` finds the same files with a glob and asserts the
+ * same thing against their output.
  *
  * @returns {Promise<string[]>}
  */
@@ -346,14 +347,39 @@ async function assertions() {
       description: "unknown lesson in a real topic",
     },
     { path: "/no-such-page", status: 404, description: "custom 404" },
-    // Empty until phase 16 writes the sitemap and the feed; from then on each
-    // one has to be as free of drafts as an index is (spec §16, §25).
+    {
+      path: "/robots.txt",
+      status: 200,
+      description: "robots.txt, naming the sitemap",
+      // The origin comes from NEXT_PUBLIC_SITE_URL and not from the port this
+      // server happens to be on, so the path is what can be asserted here.
+      bodyIncludes: ["User-Agent: *", "Sitemap:", "/sitemap.xml"],
+    },
+    // Each listing has to be as free of drafts as an index is, and has to
+    // actually carry the published posts — a sitemap that lists nothing would
+    // pass an exclusion check perfectly (spec §16, §25).
     ...listings.map((listing) => ({
       path: listing,
       status: 200,
-      description: "URL listing, with no draft in it",
+      description: "URL listing, with every published post in it and no draft",
+      bodyIncludes: publishedPosts.map((post) => `/blog/${post.slug}`),
       bodyExcludes: [...draftPosts.map((post) => `/blog/${post.slug}`), ...hiddenLessonUrls],
     })),
+    // The sitemap covers Learn as well; the feed is blog posts by definition.
+    ...(listings.includes("/sitemap.xml")
+      ? [
+          {
+            path: "/sitemap.xml",
+            status: 200,
+            description: "sitemap, with every published lesson and topic in it",
+            bodyIncludes: [
+              ...publishedLessons.map((lesson) => lessonUrl(lesson)),
+              ...publishedTopics.map((topicId) => `/learn/${topicId}<`),
+              "/about<",
+            ],
+          },
+        ]
+      : []),
   ];
 }
 
