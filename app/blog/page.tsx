@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { PostCard } from "@/components/blog/PostCard";
+import { PostList } from "@/components/blog/PostList";
 import { Container } from "@/components/layout/Container";
 import { getAllBlogPosts } from "@/lib/content/blog";
 import { site } from "@/lib/site";
@@ -30,13 +30,7 @@ export default async function BlogIndexPage() {
       {posts.length === 0 ? (
         <p className="text-muted">No posts published yet.</p>
       ) : (
-        <ol className="divide-y divide-rule">
-          {posts.map((post) => (
-            <li key={post.slug} className="py-8 first:pt-0 last:pb-0">
-              <PostCard post={post} />
-            </li>
-          ))}
-        </ol>
+        <PostList posts={posts} />
       )}
     </Container>
   );

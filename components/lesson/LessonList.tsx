@@ -1,4 +1,5 @@
-import { LessonCard, type CardHeadingLevel, type LessonCardEntry } from "@/components/lesson/LessonCard";
+import type { CardHeadingLevel } from "@/components/content/headings";
+import { LessonCard, type LessonCardEntry } from "@/components/lesson/LessonCard";
 import { cn } from "@/lib/utils/cn";
 
 /**
