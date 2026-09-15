@@ -1640,3 +1640,76 @@ step of it, and manual stepping still announces each step. Two nodes carry the
 same text when the demo is idle, which the tests assert stay equal — a demo
 that told a screen reader something other than what it showed would be worse
 than either alone.
+
+---
+
+## 2026-09-14 — Homepage copy and homepage content selection are separate modules
+
+**Context:** Phase 13 asks for the homepage's copy to live in one configuration
+module (spec §8.1) and for its featured lessons to come from "a small
+configuration file" (spec §34). Both are configuration, but they are not the
+same kind: one is words, the other is a reference into the content tree.
+
+**Decision:** Copy lives under `site.home` in `lib/site.ts`. What the page
+*shows* lives in `lib/content/homepage.ts`: `RECENT_POST_COUNT`,
+`featuredLessonPaths`, and the two resolvers `getRecentPosts` and
+`getFeaturedLessons`. The route awaits the two resolvers and chooses no words
+of its own.
+
+**Alternatives:** A `featured: true` flag in lesson frontmatter was rejected —
+frontmatter describes a lesson, not a page that links to it, and a flag on four
+files is a homepage edited in four places. Putting the paths in `lib/site.ts`
+was rejected because resolving them needs `lib/content/learn.ts`, and `site.ts`
+is imported by the header, the footer and every route.
+
+**Consequences:** Publishing a post changes the homepage with no edit anywhere
+(spec §34). The featured selection is three lines in one file, and because it
+resolves through `getLessonByPath`, a featured draft is hidden in production for
+exactly the same reason every other draft is. An entry naming nothing is
+dropped rather than rendered as a dead link, so a mid-rename tree still builds;
+the cost is that a typo is silent, which one test catches by resolving the
+shipped selection against the real content tree.
+
+---
+
+## 2026-09-14 — Listing cards take their heading rank from the page
+
+**Context:** The homepage puts blog posts and lessons under section `<h2>`s, so
+the cards inside have to be `<h3>`s. `LessonCard` already took a
+`headingLevel`; `PostCard` was fixed at `<h2>`.
+
+**Decision:** `CardHeadingLevel` moves to `components/content/headings.ts` and
+both cards import it. `PostCard` gains the same `headingLevel` prop, defaulting
+to `h2`, and the `<ol>` the blog index used to spell out inline becomes
+`components/blog/PostList.tsx` — the counterpart of `LessonList`, used by the
+blog index and the homepage alike.
+
+**Alternatives:** Rendering the homepage sections with `<h3>` headings and
+leaving the cards at `<h2>` was rejected: it inverts the outline of the one
+page a first-time visitor lands on.
+
+**Consequences:** One listing component per content type, so a change to how a
+listing looks lands everywhere at once. The default keeps both index pages
+rendering exactly as before.
+
+---
+
+## 2026-09-14 — `pnpm verify` asserts what the homepage leads with
+
+**Context:** The phase's criterion is that the homepage reflects real
+repository content with no manual editing, and that drafts never appear on it.
+A `200` from `/` proves neither.
+
+**Decision:** `scripts/verify.mjs` now reads `publishedAt` from blog
+frontmatter, derives the newest published post itself, and asserts the homepage
+links to it — while excluding every draft post and draft lesson URL from the
+body.
+
+**Alternatives:** Importing `RECENT_POST_COUNT` and asserting all three most
+recent posts was rejected: the script is the independent oracle, and asking the
+code under test how many posts it shows would let one bug hide another. The
+newest post is the assertion that fails if the page is ever hand-written.
+
+**Consequences:** A homepage that stopped reading the filesystem would fail
+`pnpm verify` rather than pass it. Phase 15's draft audit inherits the
+exclusion list already in place.

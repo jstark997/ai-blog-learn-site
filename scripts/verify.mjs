@@ -61,7 +61,11 @@ function isContentFile(name) {
  * utilities (spec §9.2, §18). Validity is already settled: `prebuild` runs
  * `validate:content` before the build this script performs.
  *
- * @returns {Promise<{ slug: string; draft: boolean }[]>}
+ * `publishedAt` is read because the homepage lists the newest posts (spec §34)
+ * and this script has to know which one that is without asking the code that
+ * renders them.
+ *
+ * @returns {Promise<{ slug: string; publishedAt: string; draft: boolean }[]>}
  */
 async function blogPosts() {
   const entries = await readdir(BLOG_ROOT, { withFileTypes: true });
@@ -70,9 +74,13 @@ async function blogPosts() {
   return Promise.all(
     files.map(async (entry) => {
       const source = await readFile(path.join(BLOG_ROOT, entry.name), "utf8");
+      const { data } = matter(source);
       return {
         slug: entry.name.slice(0, -".mdx".length),
-        draft: matter(source).data.draft === true,
+        // Quoted in frontmatter, but a bare YAML date parses as a Date; either
+        // way the ISO prefix is what sorts.
+        publishedAt: new Date(data.publishedAt).toISOString().slice(0, 10),
+        draft: data.draft === true,
       };
     }),
   );
@@ -179,8 +187,25 @@ async function assertions() {
     (topicId) => !publishedTopics.includes(topicId),
   );
 
+  // The post the homepage must lead with, derived here rather than imported:
+  // publishing a post has to change the homepage without anyone editing it
+  // (spec §34), and the check is worthless if it asks the same code that built
+  // the page which post that is. Ties break on the slug, as the ordering does.
+  const [newestPost] = publishedPosts.toSorted(
+    (a, b) => b.publishedAt.localeCompare(a.publishedAt) || a.slug.localeCompare(b.slug),
+  );
+
   return [
-    { path: "/", status: 200, description: "homepage" },
+    {
+      path: "/",
+      status: 200,
+      description: "homepage, leading with the newest post and no draft on it",
+      bodyIncludes: [`href="/blog/${newestPost.slug}"`],
+      bodyExcludes: [
+        ...draftPosts.map((post) => `/blog/${post.slug}`),
+        ...hiddenLessonUrls,
+      ],
+    },
     {
       path: "/blog",
       status: 200,

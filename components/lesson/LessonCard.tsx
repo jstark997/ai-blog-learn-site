@@ -1,11 +1,9 @@
 import Link from "next/link";
 
 import { DraftBadge } from "@/components/content/DraftBadge";
+import type { CardHeadingLevel } from "@/components/content/headings";
 import { LessonMeta } from "@/components/lesson/LessonMeta";
 import type { Lesson } from "@/lib/content/learn";
-
-/** The heading a card renders, set by the page so the outline stays correct. */
-export type CardHeadingLevel = "h2" | "h3";
 
 export type LessonCardEntry = Pick<Lesson, "topicId" | "lessonId" | "metadata">;
 
