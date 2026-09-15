@@ -61,6 +61,15 @@ describe("ticks", () => {
   it("has nothing to label on an empty domain", () => {
     expect(ticks([2, 2], 5)).toEqual([]);
   });
+
+  // The loop below the guard is `tick += step`: a non-finite span or a count
+  // of none would make `step` zero or `NaN` and never terminate. An axis with
+  // no labels is the right answer to a domain that cannot be labelled.
+  it("refuses a domain or a count it could not step through", () => {
+    expect(ticks([0, Number.POSITIVE_INFINITY], 5)).toEqual([]);
+    expect(ticks([Number.NaN, 1], 5)).toEqual([]);
+    expect(ticks([0, 10], 0)).toEqual([]);
+  });
 });
 
 describe("sample", () => {

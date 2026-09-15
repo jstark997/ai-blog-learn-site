@@ -2099,3 +2099,75 @@ with no edit to either file, and no third filename escaped the two globs.
 There is no `og:image`. The specification does not ask for one, and a social
 card is a design artefact the author has to make; adding a generated one would
 be the agent choosing the site's visual identity.
+
+## 2026-09-15 — Coverage is a tool for finding gaps, not a gate
+
+**Context:** Phase 17 asks for a suite in which "every content utility has at
+least one test that would fail if its behaviour regressed". That is a claim
+about the whole of `lib/`, `components/` and `app/`, and it cannot be made by
+reading the test names — the question is which code no test has an opinion
+about, which is exactly what a coverage report answers.
+
+**Decision:** `@vitest/coverage-v8` is a dev dependency and `pnpm test:coverage`
+runs it over `app/**`, `components/**` and `lib/**`. It is deliberately *not*
+part of `pnpm test` and not part of the validation gate, and no threshold is
+configured.
+
+A threshold would be the wrong instrument here. V8 coverage records which lines
+executed, not which lines anything asserted about: a test that imports a module
+and asserts nothing scores the same as one that pins its behaviour. A number to
+keep above would reward adding the first kind. The report is used the way a
+compiler warning is used — read it, decide whether each uncovered line is a
+behaviour or a defence, and write a test only for the former.
+
+**Alternatives:** measuring nothing was the status quo, and it is what let the
+root layout, the 404 page, both chrome components and the whole of
+`activations.ts` reach phase 17 with no direct test while the suite looked
+comprehensive from its test names. A threshold in `pnpm test` was rejected for
+the reason above, and because coverage turns a fast suite into a slow one that
+every phase has to wait on.
+
+**Consequences:** `/coverage/` was already git-ignored; ESLint now ignores it
+too, since the generated HTML report ships JavaScript of its own that is not
+ours to lint. The report at the end of this phase reaches every function and
+every line of `app/`, `components/` and `lib/`, and 97% of branches.
+
+It also earned its keep immediately. The uncovered line that looked like an
+unreachable defence — the `exhausted` message in the gradient descent demo —
+turned out to be reachable and untested: at η = 1 the update is `x ← −x`, so a
+run oscillates for ever and only the step budget ends it. That is the third of
+the demo's three endings, and nothing asserted it. It has a test now, in the
+loop and in the component.
+
+What is left uncovered is deliberate: defensive branches no caller can reach
+(`describeValue`'s `undefined` case, which `formatIssue` guards against before
+calling it), and the empty-state branches of the two index pages, which need a
+content tree with nothing published in it and are covered instead by the same
+code paths in `lib/content`.
+
+## 2026-09-15 — The root layout is tested as a document, not as a component
+
+**Context:** `app/layout.tsx` renders `<html>` and `<body>`, and it carries
+three things no page can restore on its own: the document language, the single
+`<main>` landmark, and the skip link that reaches it. Testing Library mounts
+into a `<div>`, so the layout cannot be rendered the way every other component
+test renders one.
+
+**Decision:** `tests/layout.test.tsx` renders the layout with
+`renderToStaticMarkup` and parses the result with `DOMParser` — the markup a
+browser would actually receive — then asserts on that document. The header, the
+footer and the 404 page are ordinary component renders in the same file, since
+none of them is a document.
+
+Two mocks are needed and both are about the toolchain rather than the code:
+`next/font/google` is a compile-time transform in Next's compiler and is only a
+plain function under Vitest, and `usePathname` needs a router the test has no
+reason to build.
+
+**Alternatives:** asserting the skip link by reading the layout's source was
+considered and rejected — it would pass on a layout that never rendered.
+
+**Consequences:** the skip link and its target are now pinned to each other: a
+change to either `#main` or the `id` fails the test. The visual and
+screen-reader questions these tests deliberately do not answer are phase 18's,
+where they belong to a human.

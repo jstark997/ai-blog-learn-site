@@ -201,6 +201,24 @@ describe("every route's metadata", () => {
       expect(route.metadata.robots, route.path).toBeUndefined();
     }
   });
+
+  /**
+   * The counterpart, for a URL that names nothing: the page 404s, and its
+   * metadata has to be empty, or the 404 would be served with the title and
+   * canonical URL of a topic the site does not have. `scripts/verify.mjs`
+   * checks the status code against a real server; this is the head of the
+   * same response.
+   */
+  it("has nothing to say about a topic the site does not have", async () => {
+    const topics = await import("@/app/learn/[topic]/page");
+
+    await expect(topics.generateMetadata(routeProps({ topic: "no-such-topic" }))).resolves.toEqual(
+      {},
+    );
+    await expect(topics.default(routeProps({ topic: "no-such-topic" }))).rejects.toMatchObject({
+      digest: "NEXT_HTTP_ERROR_FALLBACK;404",
+    });
+  });
 });
 
 describe("the sitemap, with SHOW_DRAFTS=false", () => {

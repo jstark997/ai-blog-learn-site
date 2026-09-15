@@ -4,16 +4,19 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { GradientDescentDemo } from "@/components/learn/neural-networks/GradientDescentDemo";
 import {
   CONVERGENCE_TOLERANCE,
+  current,
   DEFAULT_LEARNING_RATE,
   DEFAULT_START,
   DIVERGENCE_LIMIT,
   extendPath,
   LEARNING_RATE_RANGE,
+  loss,
   MAX_STEPS,
   runToEnd,
   startPath,
   statusOf,
   step,
+  stepCount,
 } from "@/components/learn/neural-networks/gradientDescent";
 
 /**
@@ -94,6 +97,33 @@ describe("the descent loop", () => {
     expect(Math.abs(path.at(-1) ?? NaN)).toBeGreaterThan(DIVERGENCE_LIMIT);
     // The guard is what keeps it finite: one more step would be ∞ − ∞ = NaN.
     expect(extendPath(path, LEARNING_RATE_RANGE[1])).toEqual(path);
+  });
+
+  // The loop is driven from a click handler and from a timer, both of which
+  // hand it whatever path is in state. None of these may throw, and none may
+  // put a step count of `NaN` in the readout.
+  it("stays total on a path with nothing in it", () => {
+    expect(current([])).toBeNaN();
+    expect(stepCount([])).toBe(0);
+    expect(extendPath([], DEFAULT_LEARNING_RATE)).toEqual([]);
+    expect(loss([])).toBeNaN();
+  });
+
+  /**
+   * The third way a run ends, and the one that is easiest to leave untested
+   * because it needs a particular rate to reach: at η = 1 the update is
+   * `x ← x(1 − 2η) = −x`, so the point oscillates between ±x₀ for ever. It
+   * neither converges nor diverges, and only the step budget stops it.
+   */
+  it("runs out of budget at a rate that neither converges nor diverges", () => {
+    const path = runToEnd(startPath(2.5), 1);
+
+    expect(statusOf(path)).toBe("exhausted");
+    expect(stepCount(path)).toBe(MAX_STEPS);
+    expect(path.every(Number.isFinite)).toBe(true);
+    // Oscillating, not shrinking: the last step is as far from the minimum as
+    // the first, which is what distinguishes this ending from convergence.
+    expect(Math.abs(current(path))).toBeCloseTo(2.5);
   });
 
   it("gives every rate the slider offers a budget it terminates within", () => {
@@ -260,6 +290,19 @@ describe("GradientDescentDemo", () => {
     click("Reset");
     click("Step");
     expect(readout().step).toBe(1);
+  });
+
+  it("says that it ran out of steps, rather than claiming to have converged", () => {
+    stubReducedMotion(true);
+    vi.useFakeTimers();
+    render(<GradientDescentDemo />);
+
+    setSlider(/Learning rate/, 1);
+    click("Run to the end");
+
+    expect(screen.getByText(new RegExp(`^Stopped after ${MAX_STEPS} steps`))).toBeInTheDocument();
+    expect(readout()).toMatchObject({ step: MAX_STEPS });
+    expect(Number.isFinite(readout().x)).toBe(true);
   });
 
   it("announces where a run ended rather than interrupting at every step", () => {

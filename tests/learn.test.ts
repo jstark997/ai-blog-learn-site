@@ -157,6 +157,18 @@ describe("getLessonsByTopic", () => {
     expect(ids).toEqual(["real"]);
   });
 
+  // The topic page builds this path out of a URL segment, so a segment that
+  // tries to leave the content directory must not reach the filesystem — the
+  // same guard `getLessonByPath` applies to both of its segments.
+  it("refuses a topic that is a path rather than a name", async () => {
+    const tree = await contentTree(neuralNetworks);
+    const { getLessonsByTopic } = await learnWithDrafts(false);
+
+    for (const topicId of ["../neural-networks", "neural-networks/nested", "", ".hidden"]) {
+      await expect(getLessonsByTopic(topicId, tree)).resolves.toEqual([]);
+    }
+  });
+
   it("returns nothing, rather than throwing, for a topic with no directory", async () => {
     const tree = await contentTree(neuralNetworks);
     const { getLessonsByTopic } = await learnWithDrafts(false);
@@ -209,6 +221,19 @@ describe("getLessonsByTopic", () => {
     expect(ids).toEqual(["attention"]);
     expect(warn).toHaveBeenCalledOnce();
     expect(warn.mock.calls[0][0]).toContain("broken-draft.mdx");
+  });
+
+  // A topic with no directory is simply a topic with no lessons. A directory
+  // that exists and cannot be read is not: publishing a topic page with its
+  // lessons silently missing is worse than failing the build.
+  it("propagates a read failure that is not a missing directory", async () => {
+    const tree = await contentTree(neuralNetworks);
+    await writeFile(path.join(tree, "transformers"), "not a directory", "utf8");
+    const { getLessonsByTopic } = await learnWithDrafts(false);
+
+    await expect(getLessonsByTopic("transformers", tree)).rejects.toMatchObject({
+      code: "ENOTDIR",
+    });
   });
 });
 
@@ -316,6 +341,18 @@ describe("getLessonByPath", () => {
     const shown = await learnWithDrafts(true);
     const entry = await shown.getLessonByPath("neural-networks", "wip", tree);
     expect(entry?.metadata.draft).toBe(true);
+  });
+
+  // The counterpart one file down: an absent lesson is a 404, but a lesson
+  // that exists and cannot be read is a broken build.
+  it("propagates a read failure that is not a missing file", async () => {
+    const tree = await contentTree(neuralNetworks);
+    await mkdir(path.join(tree, "neural-networks", "unreadable.mdx"));
+    const { getLessonByPath } = await learnWithDrafts(false);
+
+    await expect(
+      getLessonByPath("neural-networks", "unreadable", tree),
+    ).rejects.toMatchObject({ code: "EISDIR" });
   });
 });
 
