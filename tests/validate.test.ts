@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { blogPostSchema, lessonSchema } from "@/lib/content/schemas";
+import { blogPostSchema, lessonSchema, pageSchema } from "@/lib/content/schemas";
 import {
   ContentValidationError,
   checkBody,
@@ -106,6 +106,20 @@ describe("checkFrontmatter", () => {
 
     expect(result.ok).toBe(false);
     expect(result.ok ? "" : result.issue.severity).toBe("warning");
+  });
+
+  it("still errors on a draft flag when the content type has no drafts", () => {
+    // A standalone page (spec §24) has nothing unfinished to excuse, so
+    // `draft: true` on one is a mistake to report, not a reason to skip it.
+    const result = checkFrontmatter(
+      pageSchema,
+      { title: "About", description: "D", draft: true },
+      "content/pages/about.mdx",
+      { draftable: false },
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.ok ? "" : result.issue.severity).toBe("error");
   });
 });
 

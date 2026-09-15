@@ -1,9 +1,10 @@
 #!/usr/bin/env node
-// Eagerly validates every file under content/ — frontmatter against the Zod
-// schemas, the body rule that MDX files import nothing (spec §15), plus the
-// cross-file checks a single file cannot make about itself: topic directory
-// <-> topics.ts parity, `order` uniqueness within a topic, prerequisite
-// resolution and blog slug uniqueness (application spec §18).
+// Eagerly validates every file under content/ — blog posts, lessons and
+// standalone pages — frontmatter against the Zod schemas, the body rule that
+// MDX files import nothing (spec §15), plus the cross-file checks a single file
+// cannot make about itself: topic directory <-> topics.ts parity, `order`
+// uniqueness within a topic, prerequisite resolution and blog slug uniqueness
+// (application spec §18).
 //
 // Exits non-zero when published content is invalid. Runs as `prebuild` and in
 // CI, so a broken post cannot reach a deployment. Invalid *drafts* warn and are
@@ -57,7 +58,7 @@ const TOPICS_MODULE = path.resolve(
 
 const load = (relativePath) =>
   import(pathToFileURL(path.resolve(REPOSITORY_ROOT, relativePath)).href);
-const { blogPostSchema, lessonSchema } = await load("lib/content/schemas.ts");
+const { blogPostSchema, lessonSchema, pageSchema } = await load("lib/content/schemas.ts");
 const { checkBody, checkFrontmatter, crossFileIssues, formatIssue, isDraftFrontmatter } =
   await load("lib/content/validate.ts");
 
@@ -106,8 +107,13 @@ let filesChecked = 0;
 const report = (file, severity, detail) =>
   issues.push({ file: display(file), severity, details: [detail] });
 
-/** Validates one content file and returns its metadata, or null if invalid. */
-async function validateFile(file, schema) {
+/**
+ * Validates one content file and returns its metadata, or null if invalid.
+ *
+ * `draftable` is false for a content type with no `draft` field, so an invalid
+ * page fails rather than warning its way past the gate (spec §18).
+ */
+async function validateFile(file, schema, { draftable = true } = {}) {
   filesChecked += 1;
   const contentFile = await readContentFile(file);
   if (!contentFile.ok) {
@@ -119,11 +125,11 @@ async function validateFile(file, schema) {
   // instead of them: an author fixing one file should see everything wrong with
   // it in a single run. Draft status is read from the raw frontmatter, so a
   // draft still only warns even when its metadata is what is broken.
-  const draft = isDraftFrontmatter(contentFile.data);
+  const draft = draftable && isDraftFrontmatter(contentFile.data);
   const bodyIssue = checkBody(contentFile.source, display(file), draft);
   if (bodyIssue !== null) issues.push(bodyIssue);
 
-  const result = checkFrontmatter(schema, contentFile.data, display(file));
+  const result = checkFrontmatter(schema, contentFile.data, display(file), { draftable });
   if (result.ok) return result.metadata;
 
   issues.push(result.issue);
@@ -193,6 +199,27 @@ for (const entry of await readDirectory(learnRoot)) {
       });
     }
   }
+}
+
+// --- content/pages: flat .mdx files, one per standalone page ---------------
+// A page has no draft flag and no cross-file relationships, so the walk is the
+// blog walk without the slug bookkeeping: read it, validate it, move on. The
+// route that renders a page names its file directly (spec §24), and `pnpm
+// verify` is what asserts that route answers.
+const pagesRoot = path.join(CONTENT_ROOT, "pages");
+for (const entry of await readDirectory(pagesRoot)) {
+  const file = path.join(pagesRoot, entry.name);
+
+  if (entry.isDirectory()) {
+    report(file, "error", "path: Pages are flat files in content/pages/; a subdirectory has no route");
+    continue;
+  }
+  if (!isMdx(entry.name)) {
+    report(file, "warning", "path: Not an .mdx file, so nothing will read it");
+    continue;
+  }
+
+  await validateFile(file, pageSchema, { draftable: false });
 }
 
 // --- topic presentation data ----------------------------------------------
