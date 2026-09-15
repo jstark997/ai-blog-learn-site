@@ -16,7 +16,7 @@
  * demo file, not in this one.
  *
  * Each demo therefore needs a default export, which is what `import()` resolves
- * to here. `GradientDescentDemo` joins it in phase 12.
+ * to here.
  */
 import dynamic from "next/dynamic";
 
@@ -25,5 +25,8 @@ import type { MdxComponents } from "@/lib/content/mdx";
 export const demoComponents = {
   ActivationFunctionExplorer: dynamic(
     () => import("@/components/learn/neural-networks/ActivationFunctionExplorer"),
+  ),
+  GradientDescentDemo: dynamic(
+    () => import("@/components/learn/neural-networks/GradientDescentDemo"),
   ),
 } satisfies MdxComponents;

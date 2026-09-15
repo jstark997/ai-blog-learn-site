@@ -13,8 +13,7 @@ draft: false
 <Callout variant="warning" title="Placeholder content">
 
 Scaffolding written by a coding agent (spec §3.1), not editorial writing. The
-Gradient Descent Demo is embedded here in a later phase; the prose below is a
-stand-in for the explanation that will surround it.
+Gradient Descent Demo below is real; the prose around it is not.
 
 </Callout>
 
@@ -40,13 +39,19 @@ def descend(theta, grad, learning_rate=0.1, steps=100):
     return theta
 ```
 
-## What the demonstration will show
+## Take the steps yourself
 
-| Learning rate | Behaviour                                   |
-| ------------- | ------------------------------------------- |
-| `0.01`        | converges, slowly                            |
-| `0.10`        | converges in a handful of steps              |
-| `1.05`        | oscillates, then diverges                    |
+The demonstration minimizes $f(x) = x^{2}$, whose gradient is $2x$, so one step
+is exactly $x \leftarrow x(1 - 2\eta)$ — and the whole behaviour of the run is
+decided by how large $|1 - 2\eta|$ is.
 
-A real lesson would make the reader predict which column they are in before
-revealing it.
+| Learning rate | $\lvert 1 - 2\eta \rvert$ | Behaviour                          |
+| ------------- | -------------------------- | ---------------------------------- |
+| `0.05`        | 0.9                        | converges, one slow step at a time  |
+| `0.50`        | 0                          | lands on the minimum in one step    |
+| `0.90`        | 0.8                        | overshoots, alternates, converges   |
+| `1.05`        | 1.1                        | overshoots by more each time        |
+
+Predict which row you are in before pressing step.
+
+<GradientDescentDemo />
