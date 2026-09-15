@@ -1908,3 +1908,35 @@ the component was rejected — that is content lookup, and it belongs in
 `Prerequisite` has a fourth field, so the two tests that assert its whole shape
 were updated. The visual weight of `sm` against a sidebar line and a pager card
 is a human checkpoint; nothing in the suite can judge it.
+
+---
+
+## 2026-09-14 — The Next-generated agent rules live in `AGENTS.md`
+
+**Context:** `next dev` appends a marked block of agent instructions to
+`CLAUDE.md` and rewrites it on every run, so the file `CLAUDE.md` itself calls
+"the standing contract" was being edited by a build tool. The block argues for
+committing it where it lands, on the grounds that removing it only re-creates
+the diff.
+
+**Decision:** `AGENTS.md` now hosts the block, and `CLAUDE.md` is authored text
+again, with one hand-written row in the Documents table pointing at it.
+`writeAgentFiles` (`node_modules/next/dist/server/lib/generate-agent-files.js`)
+prefers `AGENTS.md` when that file exists and carries the markers — verified by
+calling it against a copy of both files, which reported
+`{ agentsMd: "unchanged", claudeMd: "skipped" }`. The block's genuinely useful
+part, the pinned documentation at `node_modules/next/dist/docs/`, is also named
+in the version-check section of `CLAUDE.md`, where someone would look for it.
+
+**Alternatives:** Committing the block into `CLAUDE.md` was rejected: a Next
+upgrade would then rewrite part of the contract, and the block's closing
+paragraph is housekeeping about diffs rather than instruction. Deleting it after
+each `pnpm dev` was rejected — the generator restores it. Trimming it in place
+was rejected as impossible: the generator replaces everything between the
+markers, so an edited block survives exactly until the next dev run.
+
+**Consequences:** `pnpm dev` leaves `CLAUDE.md` alone and maintains `AGENTS.md`,
+so churn from a Next upgrade lands in a generated file. Hand-written notes in
+`AGENTS.md` must stay outside the markers. If a future Next version drops the
+`AGENTS.md` preference, the block returns to `CLAUDE.md` and this needs
+revisiting.

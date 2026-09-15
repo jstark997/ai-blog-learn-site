@@ -14,6 +14,7 @@ specification carries the detail.
 | `docs/application-spec.md` | authoritative requirements — **do not edit** |
 | `docs/development-plan.md` | authoritative phase order — **do not edit** |
 | `docs/decisions.md` | decision log — **append to this whenever you choose something** |
+| `AGENTS.md` | written by `next dev`, not by hand — points at the pinned Next docs in `node_modules/next/dist/docs/` |
 
 Read the specification sections relevant to your assigned phase, not the whole
 document. If code and specification disagree, the specification wins; report
@@ -59,8 +60,10 @@ ones most likely to cost a phase.
 
 ## Check the installed versions before writing code
 
-Read `package.json`. Do not write from memory. The two failure modes that
-matter here:
+Read `package.json`. Do not write from memory. Next ships its own
+documentation at the exact pinned version in `node_modules/next/dist/docs/`;
+prefer it to recall, and to a network round trip, for anything Next-specific.
+The two failure modes that matter here:
 
 - **Next.js 16** — `params` and `searchParams` are **Promises**. Await them in
   every page, layout and `generateMetadata`. Next 14-style synchronous access
