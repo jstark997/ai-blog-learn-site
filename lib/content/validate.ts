@@ -17,7 +17,8 @@
  *
  * An unfinished draft must not break `pnpm dev` or block a deployment of
  * unrelated published content. A file whose `draft` field is itself unreadable
- * is treated as published, and fails.
+ * is treated as published, and fails — and so does every file of a content type
+ * that has no `draft` field at all (`draftable: false`, see `ValidationOptions`).
  *
  * This module is imported by `scripts/validate-content.mjs` through Node's
  * TypeScript stripping, so it must stay free of path aliases, JSX and
@@ -112,6 +113,21 @@ export function isDraftFrontmatter(data: unknown): boolean {
 }
 
 /**
+ * Whether the content type being validated has a `draft` flag at all.
+ *
+ * Only a type that does can have an invalid file downgraded to a warning: the
+ * severity rule exists so an unfinished draft cannot block a deployment, and a
+ * type with nothing to finish in private — a standalone page, reached from every
+ * route's header (spec §24) — has no unfinished state to excuse. Without this,
+ * writing `draft: true` on a page would warn and skip the file, which is the
+ * opposite of what the author would be asking for.
+ */
+export type ValidationOptions = {
+  /** Defaults to true, the behaviour posts and lessons want. */
+  draftable?: boolean;
+};
+
+/**
  * Validates one file's frontmatter without deciding what to do about it.
  * Returns the parsed metadata, or the issue, classified by draft status.
  */
@@ -119,6 +135,7 @@ export function checkFrontmatter<Schema extends z.ZodType>(
   schema: Schema,
   data: unknown,
   file: string,
+  { draftable = true }: ValidationOptions = {},
 ): { ok: true; metadata: z.output<Schema> } | { ok: false; issue: ContentIssue } {
   const result = schema.safeParse(data);
   if (result.success) return { ok: true, metadata: result.data };
@@ -127,7 +144,7 @@ export function checkFrontmatter<Schema extends z.ZodType>(
     ok: false,
     issue: {
       file,
-      severity: isDraftFrontmatter(data) ? "warning" : "error",
+      severity: draftable && isDraftFrontmatter(data) ? "warning" : "error",
       details: result.error.issues.map((issue) => detailFor(issue, data)),
     },
   };
@@ -142,8 +159,9 @@ export function parseFrontmatter<Schema extends z.ZodType>(
   schema: Schema,
   data: unknown,
   file: string,
+  options: ValidationOptions = {},
 ): z.output<Schema> | null {
-  const result = checkFrontmatter(schema, data, file);
+  const result = checkFrontmatter(schema, data, file, options);
   if (result.ok) return result.metadata;
   if (result.issue.severity === "error") throw new ContentValidationError(result.issue);
 

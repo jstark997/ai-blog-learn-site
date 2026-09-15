@@ -111,3 +111,22 @@ export const lessonSchema = z.strictObject({
 });
 
 export type LessonMetadata = z.infer<typeof lessonSchema>;
+
+/**
+ * Standalone page frontmatter (spec §24): `/about` today, and any other page
+ * whose prose belongs in MDX rather than in a component.
+ *
+ * Narrower than the two content types on purpose. A page is not part of a
+ * chronology, so it has no `publishedAt`; it is not in a reading order, so it
+ * has no `order`; and it has no `draft` field, because a page is reached from
+ * the global navigation on every route — an unfinished one is not committed, it
+ * is not published with a flag to hide it. `strictObject` turns each of those
+ * into a named error rather than a field that is silently ignored.
+ */
+export const pageSchema = z.strictObject({
+  title: requiredText("Expected a title"),
+  description: requiredText("Expected a description"),
+  updatedAt: isoDate.optional(),
+});
+
+export type PageMetadata = z.infer<typeof pageSchema>;

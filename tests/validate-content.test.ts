@@ -179,6 +179,67 @@ describe("pnpm validate:content", () => {
   });
 });
 
+describe("pnpm validate:content, on standalone pages", () => {
+  it("checks a page against the page schema", async () => {
+    const tree = await contentTree({
+      "pages/about.mdx": [
+        "---",
+        'title: "About"',
+        'description: "Who writes this."',
+        'updatedAt: "2026-09-14"',
+        "---",
+        "",
+        "Body.",
+      ].join("\n"),
+    });
+
+    const { status, stdout } = validate(tree);
+
+    expect(status).toBe(0);
+    expect(stdout).toContain("1 file checked, 0 errors, 0 warnings");
+  });
+
+  it("fails on a page with a field it does not have, since a page cannot be a draft", async () => {
+    const tree = await contentTree({
+      "pages/about.mdx": [
+        "---",
+        'title: "About"',
+        'description: "Who writes this."',
+        "draft: true",
+        "---",
+        "",
+        "Body.",
+      ].join("\n"),
+    });
+
+    const { status, stderr } = validate(tree);
+
+    // An error, not the warning a draft post would get: `isDraftFrontmatter`
+    // reads the flag, but the page schema is what decides the field is not real.
+    expect(status).toBe(1);
+    expect(stderr).toContain("pages/about.mdx");
+    expect(stderr).toContain("draft: Not a field this content type has");
+  });
+
+  it("fails on a page hidden in a subdirectory, which has no route", async () => {
+    const tree = await contentTree({
+      "pages/legal/terms.mdx": [
+        "---",
+        'title: "Terms"',
+        'description: "The terms."',
+        "---",
+        "",
+        "Body.",
+      ].join("\n"),
+    });
+
+    const { status, stderr } = validate(tree);
+
+    expect(status).toBe(1);
+    expect(stderr).toContain("flat files");
+  });
+});
+
 describe("pnpm validate:content, on learn content", () => {
   it("passes on a topic whose directory and topics.ts entry agree", async () => {
     const tree = await contentTree(

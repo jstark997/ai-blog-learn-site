@@ -25,6 +25,7 @@ import matter from "gray-matter";
 const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const BLOG_ROOT = path.join(REPOSITORY_ROOT, "content", "blog");
 const LEARN_ROOT = path.join(REPOSITORY_ROOT, "content", "learn");
+const PAGES_ROOT = path.join(REPOSITORY_ROOT, "content", "pages");
 
 /** The environment the build and the server run in: production behaviour. */
 const SERVER_ENV = { ...process.env, SHOW_DRAFTS: "false" };
@@ -152,9 +153,31 @@ async function lessons() {
   return byTopic.flat();
 }
 
+/**
+ * What `/about` must show if it is really reading `content/pages/about.mdx`
+ * (spec §24): the title from its frontmatter, and the first heading from its
+ * body — the frontmatter proves the metadata flowed through, the heading proves
+ * the MDX was compiled rather than the route carrying prose of its own.
+ *
+ * Read directly here, like the posts and the lessons, so the assertion comes
+ * from the content and not from the code that renders it. A page with no
+ * headings contributes only its title, so this keeps working whatever shape the
+ * author's own prose takes.
+ *
+ * @returns {Promise<string[]>}
+ */
+async function aboutPageMarkers() {
+  const source = await readFile(path.join(PAGES_ROOT, "about.mdx"), "utf8");
+  const { data, content } = matter(source);
+  const heading = /^#{2,3} +(.+?)\s*$/m.exec(content);
+
+  return [data.title, heading?.[1]].filter((marker) => typeof marker === "string");
+}
+
 /** @returns {Promise<Assertion[]>} */
 async function assertions() {
   const posts = await blogPosts();
+  const aboutMarkers = await aboutPageMarkers();
   const publishedPosts = posts.filter((post) => !post.draft);
   const draftPosts = posts.filter((post) => post.draft);
 
@@ -213,7 +236,12 @@ async function assertions() {
       // A draft that reached the index would show up as its own URL.
       bodyExcludes: draftPosts.map((post) => `/blog/${post.slug}`),
     },
-    { path: "/about", status: 200, description: "about page" },
+    {
+      path: "/about",
+      status: 200,
+      description: "about page, rendered from content/pages/about.mdx",
+      bodyIncludes: aboutMarkers,
+    },
     ...publishedPosts.map((post) => ({
       path: `/blog/${post.slug}`,
       status: 200,

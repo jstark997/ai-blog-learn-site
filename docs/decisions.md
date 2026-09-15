@@ -1713,3 +1713,82 @@ newest post is the assertion that fails if the page is ever hand-written.
 **Consequences:** A homepage that stopped reading the filesystem would fail
 `pnpm verify` rather than pass it. Phase 15's draft audit inherits the
 exclusion list already in place.
+
+## 2026-09-14 — A third content tree, `content/pages/`, for authored pages
+
+**Context:** Spec §24 lets the about page be MDX or a React page, and prefers
+MDX where it reduces inconsistency in the editorial workflow. The page's copy is
+editorial prose, so the workflow should be the one every essay and lesson
+already uses.
+
+**Decision:** `content/pages/<id>.mdx`, read by `lib/content/pages.ts`
+(`getPage(id)`), rendered by `app/about/page.tsx` through `renderMdx` with the
+prose registry. A new `pageSchema` in `lib/content/schemas.ts` validates
+`title`, `description` and an optional `updatedAt`, and
+`scripts/validate-content.mjs` walks the new directory, so spec §18's promise
+that the gate checks every file under `content/` still holds.
+
+Deliberately absent from `pageSchema`: `publishedAt`, because a page is not part
+of a chronology; `order`, because it is not in a reading order; and `draft`,
+because a page is linked from every route's header, so an unfinished one is not
+committed rather than committed behind a flag. There is no `getAllPages` and no
+discovery either — a page exists because a route reads it, and the id is a
+literal in that route rather than a URL segment.
+
+**Alternatives:** Keeping the copy in `lib/site.ts` beside the homepage's was
+rejected: the homepage assembles fragments around content it selects, while the
+about page *is* prose, and prose in a TypeScript object is edited like code.
+`content/about.mdx` at the content root was rejected because the validator walks
+directories, and a file loose at the root would have gone unchecked. A single
+route-local MDX file rendered by `@next/mdx` was rejected by spec §4.3.
+
+**Consequences:** One more content type and one more schema, in exchange for the
+about page going through the same pipeline, registry, validation and reviewable
+diff as everything else. `getPage` throws rather than returning `null` when the
+file is missing, so renaming it stops the build instead of quietly turning a
+header link into a 404. A second authored page — a colophon, say — is now an
+MDX file and a four-line route.
+
+---
+
+## 2026-09-14 — Severity depends on the content *type*, not only the file
+
+**Context:** `checkFrontmatter` downgraded any invalid file carrying
+`draft: true` to a warning and skipped it. A page has no `draft` field, so
+writing one would have earned a warning and a silently skipped file — the
+opposite of what the author would be asking for.
+
+**Decision:** `checkFrontmatter` and `parseFrontmatter` take
+`{ draftable }`, default `true`. `lib/content/pages.ts` and the validator's
+pages walk pass `false`, so every problem in a page is an error.
+
+**Alternatives:** Letting a page inherit the draft rule was rejected for the
+reason above. Teaching the validator to special-case `pageSchema` was rejected:
+the rule belongs to the content type, and the caller already knows which one it
+has.
+
+**Consequences:** `pages.ts` calls `checkFrontmatter` directly and throws
+`ContentValidationError` itself, so it has no unreachable warn-and-skip branch
+and `getPage` returns a page or throws. Posts and lessons are unchanged; the
+default is what they already did.
+
+---
+
+## 2026-09-14 — `pnpm verify` checks that `/about` really reads its MDX
+
+**Context:** The phase's criterion is that the page renders through the MDX
+pipeline and is editable through Git alone. The existing `200` from `/about`
+would also pass for a page with its prose hard-coded in the route.
+
+**Decision:** `scripts/verify.mjs` reads `content/pages/about.mdx` itself and
+asserts the response contains its frontmatter title and the first heading of its
+body — metadata and compiled body, from the content rather than from the code
+that renders it.
+
+**Alternatives:** Asserting a fixed sentence was rejected; the author will
+replace the prose, and a fixture in the verifier would then fail for the wrong
+reason. Deriving every heading was rejected as no stronger than deriving one.
+
+**Consequences:** A route that stopped reading `content/` fails `pnpm verify`.
+The assertion survives a full rewrite of the page, and a page with no headings
+still asserts its title.
