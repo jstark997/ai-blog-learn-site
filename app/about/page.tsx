@@ -4,6 +4,7 @@ import { Container } from "@/components/layout/Container";
 import { proseComponents } from "@/components/mdx/registry";
 import { renderMdx } from "@/lib/content/mdx";
 import { getPage } from "@/lib/content/pages";
+import { pageMetadata } from "@/lib/seo";
 import { formatDate } from "@/lib/utils/date";
 
 /** The page id, and so the file: `content/pages/about.mdx` (spec §24). */
@@ -12,10 +13,11 @@ const PAGE_ID = "about";
 export async function generateMetadata(): Promise<Metadata> {
   const { metadata } = await getPage(PAGE_ID);
 
-  return {
+  return pageMetadata({
+    path: "/about",
     title: metadata.title,
     description: metadata.description,
-  };
+  });
 }
 
 /**

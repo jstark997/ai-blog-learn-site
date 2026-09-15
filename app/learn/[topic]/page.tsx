@@ -5,6 +5,8 @@ import { Container } from "@/components/layout/Container";
 import { LessonList } from "@/components/lesson/LessonList";
 import { getAllLessons, getLessonsByTopic } from "@/lib/content/learn";
 import { getTopic } from "@/lib/content/topics";
+import { pageMetadata } from "@/lib/seo";
+import { site } from "@/lib/site";
 
 /**
  * Only the topics `generateStaticParams` returns may be rendered, for the same
@@ -33,10 +35,13 @@ export async function generateMetadata({
   const topic = getTopic(topicId);
   if (topic === undefined) return {};
 
-  return {
+  return pageMetadata({
+    path: `/learn/${topicId}`,
     title: topic.title,
-    description: topic.description,
-  };
+    // A topic's blurb is optional in `topics.ts`; the section's own
+    // description stands in rather than leaving the page without one.
+    description: topic.description ?? site.learnDescription,
+  });
 }
 
 /**
