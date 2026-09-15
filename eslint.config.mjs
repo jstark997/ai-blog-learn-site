@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // The v8 coverage report `pnpm test:coverage` writes: generated HTML and
+    // the JavaScript that drives it, git-ignored and not ours to lint.
+    "coverage/**",
   ]),
 ]);
 

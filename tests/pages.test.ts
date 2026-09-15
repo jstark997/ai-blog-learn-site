@@ -2,6 +2,7 @@
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { getPage } from "@/lib/content/pages";
@@ -97,6 +98,16 @@ describe("getPage", () => {
     // so a flag that looked like it hid one would be a trap.
     await expect(getPage("about", root)).rejects.toThrow(/draft/);
   });
+
+  // A missing file gets the sentence above, which tells the author what to
+  // rename. Any other read failure is reported as itself: rewriting it as
+  // "missing page content" would send them looking for a file that is there.
+  it("reports a read failure that is not a missing file as itself", async () => {
+    const root = await pagesTree({ "about.mdx": page() });
+    await mkdir(path.join(root, "colophon.mdx"));
+
+    await expect(getPage("colophon", root)).rejects.toMatchObject({ code: "EISDIR" });
+  });
 });
 
 describe("the about page this site ships", () => {
@@ -106,5 +117,30 @@ describe("the about page this site ships", () => {
     expect(metadata.title.length).toBeGreaterThan(0);
     // Spec §3.1: agent-written prose carries a visible placeholder callout.
     expect(content).toContain('<Callout variant="warning"');
+  });
+
+  /**
+   * The route, rendered. `getPage` above proves the file parses; this proves
+   * the page puts it on screen — the frontmatter in the header, the MDX body
+   * through the prose registry. The route holds no prose of its own, so a
+   * heading that stopped rendering would leave a page with nothing on it and
+   * no test to say so.
+   */
+  it("renders its frontmatter and its body, the callout included", async () => {
+    const { default: AboutPage } = await import("@/app/about/page");
+    const { metadata } = await getPage("about");
+    const html = renderToStaticMarkup(await AboutPage());
+
+    expect(html).toMatch(new RegExp(`<h1[^>]*>${metadata.title}</h1>`));
+    expect(html).toContain(metadata.description);
+    // The callout the MDX declares, turned into the component the registry maps
+    // it to rather than left as literal text.
+    expect(html).not.toContain("<Callout");
+    expect(html).toContain("Placeholder content");
+
+    if (metadata.updatedAt !== undefined) {
+      // The machine-readable date, alongside the one a reader sees.
+      expect(html).toMatch(new RegExp(`<time [^>]*"${metadata.updatedAt}"`, "i"));
+    }
   });
 });

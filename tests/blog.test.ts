@@ -212,6 +212,19 @@ describe("getAllBlogPosts", () => {
     expect(warn).toHaveBeenCalledOnce();
     expect(warn.mock.calls[0][0]).toContain("broken-draft.mdx");
   });
+
+  // Only a missing directory means "no posts". Any other failure — a bad
+  // permission, a path that is not a directory at all — is a build that cannot
+  // see the content, and a build that cannot see the content must stop rather
+  // than deploy an empty blog over a full one.
+  it("propagates a read failure that is not a missing directory", async () => {
+    const tree = await contentTree({ "first.mdx": post("First", "2026-01-01") });
+    const { getAllBlogPosts } = await blogWithDrafts(false);
+
+    await expect(getAllBlogPosts(path.join(tree, "first.mdx"))).rejects.toMatchObject({
+      code: "ENOTDIR",
+    });
+  });
 });
 
 describe("getBlogPostBySlug", () => {
@@ -261,6 +274,16 @@ describe("getBlogPostBySlug", () => {
     const entry = await getBlogPostBySlug("unfinished", tree);
 
     expect(entry?.metadata.draft).toBe(true);
+  });
+
+  // The counterpart of the directory case above, one file down: an absent file
+  // is a 404, but a file that exists and cannot be read is a broken build.
+  it("propagates a read failure that is not a missing file", async () => {
+    const tree = await contentTree({ "wanted.mdx": post("Wanted", "2026-01-01") });
+    await mkdir(path.join(tree, "unreadable.mdx"));
+    const { getBlogPostBySlug } = await blogWithDrafts(false);
+
+    await expect(getBlogPostBySlug("unreadable", tree)).rejects.toMatchObject({ code: "EISDIR" });
   });
 });
 

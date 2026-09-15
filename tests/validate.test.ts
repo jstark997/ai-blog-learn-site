@@ -90,6 +90,37 @@ describe("checkFrontmatter", () => {
     );
   });
 
+  /**
+   * The `received` note is the half of the message that tells an author what
+   * they wrote, and YAML hands the schema more kinds of value than a string:
+   * an unquoted date is a `Date`, an indented block is a mapping, a dash list
+   * is a list. Each is named in the words the author would use rather than
+   * printed as `[object Object]`.
+   */
+  it("names the value the author actually wrote, whatever kind it is", () => {
+    const received = (
+      data: Record<string, unknown>,
+      schema: typeof blogPostSchema | typeof lessonSchema = blogPostSchema,
+    ): string => {
+      const result = checkFrontmatter(schema, data, "content/blog/a.mdx");
+      return result.ok ? "" : formatIssue(result.issue);
+    };
+
+    expect(received(post({ title: 42 }))).toContain("(received 42)");
+    expect(received(post({ title: true }))).toContain("(received true)");
+    expect(received(post({ title: null }))).toContain("(received null)");
+    // A field that is absent gets no note at all: "received nothing" would read
+    // as though the author had written something empty.
+    expect(received(post({ title: undefined }))).not.toContain("received");
+    expect(received(post({ title: ["One", "Two"] }))).toContain("(received a list)");
+    expect(received(post({ title: { en: "One" } }))).toContain("(received a mapping)");
+    expect(received(post({ title: new Date("2026-09-04") }))).toContain("(received a Date)");
+    // Long enough that quoting it would bury the expectation it explains.
+    expect(received(lesson({ order: "ten".repeat(20) }), lessonSchema)).toContain(
+      "(received a long string)",
+    );
+  });
+
   it("classifies invalid published content as an error", () => {
     const result = checkFrontmatter(blogPostSchema, post({ title: undefined }), "content/blog/a.mdx");
 
