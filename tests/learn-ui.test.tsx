@@ -115,7 +115,12 @@ describe("PrerequisiteList", () => {
     render(
       <PrerequisiteList
         prerequisites={[
-          { topicId: "neural-networks", lessonId: "introduction", title: "A Network Is a Function" },
+          {
+            topicId: "neural-networks",
+            lessonId: "introduction",
+            title: "A Network Is a Function",
+            draft: false,
+          },
         ]}
       />,
     );
@@ -129,11 +134,33 @@ describe("PrerequisiteList", () => {
   it("names an unresolved prerequisite without linking to a page that would 404", () => {
     render(
       <PrerequisiteList
-        prerequisites={[{ topicId: "neural-networks", lessonId: "backpropagation", title: null }]}
+        prerequisites={[
+          { topicId: "neural-networks", lessonId: "backpropagation", title: null, draft: false },
+        ]}
       />,
     );
 
     expect(screen.getByText("neural-networks/backpropagation")).toBeInTheDocument();
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
+  // A prerequisite only resolves to a draft where drafts are visible; there the
+  // link leads somewhere unfinished and has to say so (spec §16).
+  it("badges a prerequisite that resolves to a visible draft", () => {
+    render(
+      <PrerequisiteList
+        prerequisites={[
+          {
+            topicId: "neural-networks",
+            lessonId: "backpropagation",
+            title: "Backpropagation",
+            draft: true,
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByRole("link", { name: "Backpropagation" })).toBeInTheDocument();
+    expect(screen.getByText("Draft")).toBeInTheDocument();
   });
 });

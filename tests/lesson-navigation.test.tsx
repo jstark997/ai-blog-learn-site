@@ -82,6 +82,16 @@ describe("LessonPager", () => {
 
     expect(container).toBeEmptyDOMElement();
   });
+
+  // A neighbour is only ever a draft where drafts are visible, because
+  // `getAdjacentLessons` filters before it computes — but there the pager is a
+  // listing like any other and has to badge it (spec §16).
+  it("badges a draft neighbour", () => {
+    render(<LessonPager previous={null} next={entry("backpropagation", "Backpropagation", true)} />);
+
+    expect(screen.getByRole("link", { name: /Backpropagation/ })).toBeInTheDocument();
+    expect(screen.getByText("Draft")).toBeInTheDocument();
+  });
 });
 
 function renderNav(currentLessonId = "activation-functions") {

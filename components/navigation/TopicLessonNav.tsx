@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useId, useRef, useState } from "react";
 
+import { DraftBadge } from "@/components/content/DraftBadge";
 import type { Lesson } from "@/lib/content/learn";
 import { cn } from "@/lib/utils/cn";
 
@@ -28,6 +29,9 @@ export type TopicNavEntry = Pick<Lesson, "lessonId" | "metadata">;
  * The order is `getLessonsByTopic`'s, which is `order` ascending with the
  * drafts already removed. Nothing here sorts, and no lesson's URL is written
  * anywhere but here and `LessonCard` — both from the two ids.
+ *
+ * A draft reaches this list only where drafts are visible at all, and carries
+ * the same `DraftBadge` every other listing uses (spec §16).
  */
 export function TopicLessonNav({
   topicId,
@@ -116,7 +120,7 @@ export function TopicLessonNav({
                   {lesson.metadata.draft && (
                     <>
                       {" "}
-                      <span className="ml-1 font-mono text-xs tracking-wide uppercase">Draft</span>
+                      <DraftBadge size="sm" className="ml-1" />
                     </>
                   )}
                 </span>
