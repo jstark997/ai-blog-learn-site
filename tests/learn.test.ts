@@ -430,8 +430,8 @@ describe("getPrerequisites", () => {
     );
 
     expect(resolved).toEqual([
-      { topicId: "neural-networks", lessonId: "introduction", title: "Introduction" },
-      { topicId: "transformers", lessonId: "attention", title: "Attention" },
+      { topicId: "neural-networks", lessonId: "introduction", title: "Introduction", draft: false },
+      { topicId: "transformers", lessonId: "attention", title: "Attention", draft: false },
     ]);
   });
 
@@ -447,6 +447,24 @@ describe("getPrerequisites", () => {
     );
 
     expect(resolved.map((entry) => entry.title)).toEqual([null, null]);
+    // Nothing resolved, so there is no draft to report either.
+    expect(resolved.map((entry) => entry.draft)).toEqual([false, false]);
+  });
+
+  it("reports a resolved draft as a draft, so the page can badge the link", async () => {
+    const tree = await contentTree({
+      "neural-networks/backpropagation.mdx": lesson("Backprop", 40, ["draft: true"]),
+    });
+    const { getPrerequisites } = await learnWithDrafts(true);
+
+    const [resolved] = await getPrerequisites(["neural-networks/backpropagation"], tree);
+
+    expect(resolved).toEqual({
+      topicId: "neural-networks",
+      lessonId: "backpropagation",
+      title: "Backprop",
+      draft: true,
+    });
   });
 });
 

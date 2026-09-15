@@ -4,16 +4,20 @@
 //
 // The assertions are derived from `content/`, not hard-coded: every published
 // post and lesson must return 200 and every draft must return 404, so adding
-// either extends the check automatically (application spec §54.1). Later phases
-// add the sitemap and the RSS feed.
+// either extends the check automatically (application spec §54.1).
 //
 // The server runs with SHOW_DRAFTS=false, so `pnpm verify` always measures
 // *production* draft behaviour whatever the ambient environment says (spec §16).
+// The draft assertions are the same ones `tests/draft-audit.test.ts` makes
+// in-process; this is the end-to-end half — real status codes off a real
+// server. The sitemap and the RSS feed are phase 16 and are picked up by
+// `urlListingPaths()` below as soon as their route files exist.
 //
 // Never run `next start` in the foreground from an agent session; use this.
 
 import { spawn } from "node:child_process";
 import { once } from "node:events";
+import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import path from "node:path";
@@ -26,6 +30,7 @@ const REPOSITORY_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)
 const BLOG_ROOT = path.join(REPOSITORY_ROOT, "content", "blog");
 const LEARN_ROOT = path.join(REPOSITORY_ROOT, "content", "learn");
 const PAGES_ROOT = path.join(REPOSITORY_ROOT, "content", "pages");
+const APP_ROOT = path.join(REPOSITORY_ROOT, "app");
 
 /** The environment the build and the server run in: production behaviour. */
 const SERVER_ENV = { ...process.env, SHOW_DRAFTS: "false" };
@@ -66,7 +71,7 @@ function isContentFile(name) {
  * and this script has to know which one that is without asking the code that
  * renders them.
  *
- * @returns {Promise<{ slug: string; publishedAt: string; draft: boolean }[]>}
+ * @returns {Promise<{ slug: string; title: string; publishedAt: string; draft: boolean }[]>}
  */
 async function blogPosts() {
   const entries = await readdir(BLOG_ROOT, { withFileTypes: true });
@@ -78,6 +83,7 @@ async function blogPosts() {
       const { data } = matter(source);
       return {
         slug: entry.name.slice(0, -".mdx".length),
+        title: String(data.title),
         // Quoted in frontmatter, but a bare YAML date parses as a Date; either
         // way the ISO prefix is what sorts.
         publishedAt: new Date(data.publishedAt).toISOString().slice(0, 10),
@@ -122,7 +128,8 @@ function neighbours(lesson, all) {
  * derived from it (spec §13) and this script has to derive them independently
  * of the code that renders them.
  *
- * @returns {Promise<{ topicId: string; lessonId: string; order: number; draft: boolean }[]>}
+ * @returns {Promise<{ topicId: string; lessonId: string; title: string; order: number;
+ *   draft: boolean }[]>}
  */
 async function lessons() {
   const topics = await readdir(LEARN_ROOT, { withFileTypes: true });
@@ -142,6 +149,7 @@ async function lessons() {
           return {
             topicId: topic.name,
             lessonId: entry.name.slice(0, -".mdx".length),
+            title: String(data.title),
             order: Number(data.order),
             draft: data.draft === true,
           };
@@ -174,6 +182,30 @@ async function aboutPageMarkers() {
   return [data.title, heading?.[1]].filter((marker) => typeof marker === "string");
 }
 
+/**
+ * The URLs of the route modules that publish a list of URLs rather than a page:
+ * the sitemap and any XML feed (spec §25). Both belong to phase 16.
+ *
+ * Discovered from the `app/` tree rather than listed, so the draft assertions
+ * reach them on the day they are written. `app/sitemap.ts` is served at
+ * `/sitemap.xml`; a route handler under `app/<name>.xml/` is served at
+ * `/<name>.xml`. `tests/draft-audit.test.ts` finds the same files with a glob
+ * and asserts the same thing against their output.
+ *
+ * @returns {Promise<string[]>}
+ */
+async function urlListingPaths() {
+  const paths = existsSync(path.join(APP_ROOT, "sitemap.ts")) ? ["/sitemap.xml"] : [];
+
+  const entries = await readdir(APP_ROOT, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !entry.name.endsWith(".xml")) continue;
+    if (existsSync(path.join(APP_ROOT, entry.name, "route.ts"))) paths.push(`/${entry.name}`);
+  }
+
+  return paths;
+}
+
 /** @returns {Promise<Assertion[]>} */
 async function assertions() {
   const posts = await blogPosts();
@@ -203,6 +235,14 @@ async function assertions() {
   // no topic page may mention one in production (spec §16).
   const hiddenLessonUrls = draftLessons.map((lesson) => lessonUrl(lesson));
 
+  // The titles of everything unpublished. Excluded from the pages that render
+  // *metadata* — the indexes, the topic overviews — but never from a page that
+  // renders a body: published prose may name an unfinished lesson, and
+  // `content/learn/neural-networks/introduction.mdx` already does.
+  const hiddenTitles = [...draftPosts, ...draftLessons].map((entry) => entry.title);
+
+  const listings = await urlListingPaths();
+
   // A topic page exists exactly where a published lesson does; a topic whose
   // every lesson is a draft is not generated at all.
   const publishedTopics = [...new Set(publishedLessons.map((lesson) => lesson.topicId))];
@@ -227,14 +267,16 @@ async function assertions() {
       bodyExcludes: [
         ...draftPosts.map((post) => `/blog/${post.slug}`),
         ...hiddenLessonUrls,
+        ...hiddenTitles,
       ],
     },
     {
       path: "/blog",
       status: 200,
       description: "blog index, with no draft on it",
-      // A draft that reached the index would show up as its own URL.
-      bodyExcludes: draftPosts.map((post) => `/blog/${post.slug}`),
+      // A draft that reached the index would show up as its own URL — and as
+      // its title, which is what a card renders even without its link.
+      bodyExcludes: [...draftPosts.map((post) => `/blog/${post.slug}`), ...hiddenTitles],
     },
     {
       path: "/about",
@@ -257,13 +299,13 @@ async function assertions() {
       path: "/learn",
       status: 200,
       description: "learn index, with no draft lesson on it",
-      bodyExcludes: hiddenLessonUrls,
+      bodyExcludes: [...hiddenLessonUrls, ...hiddenTitles],
     },
     ...publishedTopics.map((topicId) => ({
       path: `/learn/${topicId}`,
       status: 200,
       description: "topic overview, with no draft lesson on it",
-      bodyExcludes: hiddenLessonUrls,
+      bodyExcludes: [...hiddenLessonUrls, ...hiddenTitles],
     })),
     ...emptyTopics.map((topicId) => ({
       path: `/learn/${topicId}`,
@@ -304,6 +346,14 @@ async function assertions() {
       description: "unknown lesson in a real topic",
     },
     { path: "/no-such-page", status: 404, description: "custom 404" },
+    // Empty until phase 16 writes the sitemap and the feed; from then on each
+    // one has to be as free of drafts as an index is (spec §16, §25).
+    ...listings.map((listing) => ({
+      path: listing,
+      status: 200,
+      description: "URL listing, with no draft in it",
+      bodyExcludes: [...draftPosts.map((post) => `/blog/${post.slug}`), ...hiddenLessonUrls],
+    })),
   ];
 }
 

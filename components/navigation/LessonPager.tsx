@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { DraftBadge } from "@/components/content/DraftBadge";
 import type { Lesson } from "@/lib/content/learn";
 import { cn } from "@/lib/utils/cn";
 
@@ -18,6 +19,10 @@ const labels: Record<Direction, string> = {
  * "Previous Gradient Descent" — because the eyebrow above the title is the
  * only thing distinguishing the two, and colour and position do not reach
  * someone listening to the page (spec §28).
+ *
+ * A neighbour is only ever a draft where drafts are visible at all, because
+ * `getAdjacentLessons` filters before it computes; where one is, it is badged
+ * like every other visible draft (spec §16).
  */
 function PagerLink({ lesson, direction }: { lesson: PagerEntry; direction: Direction }) {
   const isNext = direction === "next";
@@ -35,6 +40,7 @@ function PagerLink({ lesson, direction }: { lesson: PagerEntry; direction: Direc
       <span className="text-xs font-semibold tracking-wide text-muted uppercase">
         {labels[direction]}
       </span>
+      {lesson.metadata.draft && <DraftBadge size="sm" className={cn(isNext && "self-end")} />}
       <span className="font-medium text-ink text-pretty">{lesson.metadata.title}</span>
     </Link>
   );

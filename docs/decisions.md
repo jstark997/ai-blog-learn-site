@@ -1792,3 +1792,119 @@ reason. Deriving every heading was rejected as no stronger than deriving one.
 **Consequences:** A route that stopped reading `content/` fails `pnpm verify`.
 The assertion survives a full rewrite of the page, and a page with no headings
 still asserts its title.
+
+---
+
+## 2026-09-14 — The draft audit renders the route modules in-process
+
+**Context:** Phase 15 asks for a test that fails if a draft ever leaks. The
+per-consumer tests from phases 5 and 7 already cover `lib/content` against
+synthetic trees; what was missing was a check on the assembled thing — the
+routes, over the real `content/` tree, with drafts hidden.
+
+**Decision:** `tests/draft-audit.test.ts` stubs `SHOW_DRAFTS=false` before
+importing anything, then calls the page components and `generateStaticParams`
+of the real routes and runs the results through `renderToStaticMarkup`. It
+asserts that no listing links to or names a draft, that neither dynamic route
+generates one, that `dynamicParams` is `false` on both, that a draft URL throws
+the `notFound()` digest, and that `generateMetadata` returns nothing for a
+draft. A second file, `tests/draft-visible.test.ts`, asserts the other half of
+§16 with `SHOW_DRAFTS=true`: a visible draft is badged on its own page, in both
+indexes, on its topic page, in the sidebar and in a published lesson's pager.
+
+Which content is a draft is read from the filesystem by `tests/content-oracle.ts`
+rather than through `lib/content`, for the reason `scripts/verify.mjs` reads it
+directly: a `showDrafts` stuck on `true` would report no drafts to look for and
+every assertion would pass over an empty list.
+
+A third assertion in the same file is static rather than rendered — the source
+of `app/`, `components/` and `lib/` may mention `NODE_ENV`, `VERCEL_ENV` and
+`SHOW_DRAFTS` only in `lib/content/env.ts`, and may import `showDrafts` only
+into `blog.ts` and `learn.ts`. Rendering proves the current code is right;
+this proves there is still only one place it could be wrong.
+
+**Alternatives:** Driving a built server was rejected as a duplicate of
+`pnpm verify`, which already does it and costs a build. Asserting through
+`lib/content` was rejected for the oracle reason above. Leaving the
+single-implementation rule as prose in `env.ts` was rejected: it is the
+invariant most easily broken by someone adding a feature in good faith.
+
+**Consequences:** The audit runs in well under a second as part of `pnpm test`,
+so a leak is caught before a build. It reaches only as far as the route modules:
+middleware, headers and real status codes remain `pnpm verify`'s to check.
+Breaking `showDrafts` fails ten assertions across the two files, which is the
+intended blast radius.
+
+---
+
+## 2026-09-14 — A draft's title is excluded from listings, not from prose
+
+**Context:** Excluding a draft's URL catches a link to it, but a listing that
+rendered a card without its link would still have leaked the post. The obvious
+strengthening — assert the draft's title appears nowhere in the response — is
+wrong: `content/learn/neural-networks/introduction.mdx` names *Backpropagation*
+in a table, and that is ordinary published prose about an unfinished lesson.
+
+**Decision:** Title exclusion applies only where a page renders metadata — the
+homepage, both indexes and the topic overviews — and is asserted against the
+text of rendered anchors rather than the whole body. Pages that compile an MDX
+body are held to the URL rule alone. `scripts/verify.mjs` draws the same line.
+
+**Alternatives:** Excluding titles everywhere was rejected; it would fail on
+correct content and train the next author to weaken the assertion. Excluding
+nothing but URLs was rejected as one leak short.
+
+**Consequences:** A listing that renders an unlinked draft card fails. An author
+may write about an unfinished lesson in a published one without tripping the
+audit — which is the case the tighter rule would have broken.
+
+---
+
+## 2026-09-14 — The sitemap and the feed join the audit by discovery
+
+**Context:** Phase 15 must assert that a draft appears in no sitemap and no
+feed. Both are phase 16 and neither file exists yet, so there is nothing to
+assert against — and a note in a report is exactly the kind of obligation the
+next phase does not read.
+
+**Decision:** Both checks discover their targets instead of naming them. The
+test collects `app/**/sitemap.ts` and `app/**/*.xml/route.ts` with
+`import.meta.glob`, which resolves against the filesystem at transform time and
+is simply empty today; `scripts/verify.mjs` looks for the same files with
+`existsSync` and derives the served path from each. Writing `app/sitemap.ts`
+adds the assertions with no edit to either file.
+
+**Alternatives:** A skipped test was rejected — a green skip is how an
+obligation gets lost. A test asserting the files are *absent*, so phase 16
+would be forced to notice it, was rejected as a deliberate broken window.
+
+**Consequences:** Phase 16 inherits the draft assertions for free, and a feed
+written to a filename outside those two patterns is the one case that would
+escape — which the phase 16 report should confirm either way.
+
+---
+
+## 2026-09-14 — One `DraftBadge`, and a `draft` flag on a prerequisite
+
+**Context:** The audit asks whether every place a draft is visible is badged.
+`TopicLessonNav` marked one with a styled `<span>Draft</span>` of its own,
+`LessonPager` did not mark one at all, and `PrerequisiteList` could not: the
+`Prerequisite` type carried no draft flag, so a prerequisite resolved on a
+preview deployment was linked with nothing to say it led somewhere unfinished.
+
+**Decision:** `DraftBadge` gains a `size` prop — `md` is the pill the cards and
+the article headers use, `sm` the compact form for a line of the sidebar or a
+prerequisite — and is now the only rendering of the word anywhere.
+`getPrerequisites` returns `draft` alongside `title`, `false` when nothing
+resolved, so the list can badge what it links to.
+
+**Alternatives:** Leaving the sidebar's own markup was rejected: a second
+spelling passes a badge test while looking like nothing much, and "unmistakable"
+has to be checkable in one place. Looking the prerequisite's draft state up in
+the component was rejected — that is content lookup, and it belongs in
+`lib/content/learn.ts` with the rest of it.
+
+**Consequences:** A change to the badge reaches all seven places it appears.
+`Prerequisite` has a fourth field, so the two tests that assert its whole shape
+were updated. The visual weight of `sm` against a sidebar line and a pager card
+is a human checkpoint; nothing in the suite can judge it.

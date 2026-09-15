@@ -205,6 +205,13 @@ export type Prerequisite = {
   topicId: string;
   lessonId: string;
   title: string | null;
+  /**
+   * Whether the target is itself a draft. Only ever `true` where drafts are
+   * visible — a hidden draft does not resolve at all — so this is what lets a
+   * lesson page badge a prerequisite it is linking to on a preview deployment
+   * (spec §16). `false` when nothing resolved.
+   */
+  draft: boolean;
 };
 
 /**
@@ -224,7 +231,12 @@ export async function getPrerequisites(
       const [topicId = "", lessonId = ""] = prerequisite.split("/");
       const lesson = await getLessonByPath(topicId, lessonId, root);
 
-      return { topicId, lessonId, title: lesson?.metadata.title ?? null };
+      return {
+        topicId,
+        lessonId,
+        title: lesson?.metadata.title ?? null,
+        draft: lesson?.metadata.draft ?? false,
+      };
     }),
   );
 }
