@@ -32,7 +32,7 @@ function PagerLink({ lesson, direction }: { lesson: PagerEntry; direction: Direc
       href={`/learn/${lesson.topicId}/${lesson.lessonId}`}
       rel={isNext ? "next" : "prev"}
       className={cn(
-        "flex h-full flex-col gap-1 rounded-lg border border-rule p-4",
+        "flex h-full flex-col gap-1 rounded-lg border border-control p-4",
         "transition-colors hover:border-accent hover:bg-surface",
         isNext && "text-right",
       )}

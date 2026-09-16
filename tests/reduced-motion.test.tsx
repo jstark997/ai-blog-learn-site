@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+
 import { act, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -97,5 +100,21 @@ describe("the reduced-motion preference", () => {
     unmount();
 
     expect(system.listenerCount).toBe(0);
+  });
+});
+
+/**
+ * The demonstrations answer the preference in JavaScript, because a paused
+ * animation is not the same thing as a run applied in one step. Everything else
+ * the site animates is a hover transition, and those are stopped in the
+ * stylesheet — which nothing else in the suite would notice the loss of.
+ */
+describe("the stylesheet's reduced-motion guard", () => {
+  const css = readFileSync(path.join(process.cwd(), "app", "globals.css"), "utf8");
+
+  it("shortens transitions and animations to nothing", () => {
+    expect(css).toContain("@media (prefers-reduced-motion: reduce)");
+    expect(css).toMatch(/transition-duration:\s*0\.01ms\s*!important/);
+    expect(css).toMatch(/animation-duration:\s*0\.01ms\s*!important/);
   });
 });

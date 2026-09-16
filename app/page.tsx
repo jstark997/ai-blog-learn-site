@@ -50,7 +50,7 @@ export default async function HomePage() {
           </Link>
           <Link
             href="/learn"
-            className="rounded-md border border-rule px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-surface"
+            className="rounded-md border border-control px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-surface"
           >
             {home.learnCta}
           </Link>

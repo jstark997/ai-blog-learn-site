@@ -251,9 +251,9 @@ export function GradientDescentDemo({ className }: { className?: string }) {
 }
 
 const SECONDARY_BUTTON = cn(
-  "rounded-md border border-rule px-3 py-1.5 text-sm font-medium text-ink",
+  "rounded-md border border-control px-3 py-1.5 text-sm font-medium text-ink",
   "transition-colors hover:border-accent hover:text-accent",
-  "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-rule",
+  "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-control",
   "disabled:hover:text-ink",
 );
 

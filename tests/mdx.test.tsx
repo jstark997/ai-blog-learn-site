@@ -75,6 +75,29 @@ describe("renderMdx", () => {
     expect(html).toContain("<aside>inside</aside>");
   });
 
+  /**
+   * Both of the boxes that scroll inside the reading column must be reachable
+   * without a pointer (spec §28; phase 18). `rehype-pretty-code` gives the code
+   * block its `tabindex`; `rehypeScrollableMath` gives the equation one.
+   */
+  it("makes a scrollable code block focusable", async () => {
+    const html = await render("```python\nx = 1\n```\n");
+
+    expect(html).toMatch(/<pre[^>]*tabindex="0"/);
+  });
+
+  it("makes a scrollable display equation focusable", async () => {
+    const html = await render("$$\n\\frac{a}{b}\n$$\n");
+
+    expect(html).toMatch(/<span class="katex-display"[^>]*tabindex="0"/);
+  });
+
+  it("leaves inline mathematics alone, which is not a scroll container", async () => {
+    const html = await render("Inline $a + b$ here.\n");
+
+    expect(html).not.toContain('tabindex="0"');
+  });
+
   it("keeps JSX attribute expressions, which the demos need", async () => {
     const html = await render('<Rate value={0.1} label="eta" />\n', {
       Rate: ({ value, label }: { value: number; label: string }) => (
