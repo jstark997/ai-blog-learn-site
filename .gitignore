@@ -49,6 +49,11 @@ pnpm-debug.log*
 .claude/*.lock
 .ignore/
 
+# --- Browser automation ------------------------------------------------------
+# Snapshots, console logs and screenshots written by the Playwright MCP server
+# during an accessibility or responsive review. Working notes, not artefacts.
+.playwright-mcp/
+
 # --- Editor / OS -------------------------------------------------------------
 .DS_Store
 .vscode/*

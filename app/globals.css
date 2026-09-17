@@ -74,6 +74,13 @@
   --color-accent-soft: light-dark(oklch(95.5% 0.025 258), oklch(27% 0.045 258));
   --color-on-accent: light-dark(oklch(99% 0.003 255), oklch(17.5% 0.012 260));
 
+  /* The boundary of an interactive control — a button, a segmented option, a
+     card that is a link. WCAG 1.4.11 asks 3:1 of a control's boundary against
+     what is behind it, which `rule` does not reach and is not meant to: `rule`
+     separates, `control` outlines something you can operate. `tests/contrast.test.ts`
+     holds both to their thresholds. */
+  --color-control: light-dark(oklch(60% 0.014 260), oklch(55% 0.014 260));
+
   /* The one non-accent semantic pair: a warning, used by the `warning` variant
      of the MDX `Callout` (spec §15) and by the placeholder notices spec §3.1
      requires on scaffolding content. Same `light-dark()` rule as the rest. */
@@ -108,8 +115,34 @@
     outline-offset: 2px;
   }
 
+  /* Two scroll containers focus inside their own box rather than outside it:
+     the code figure clips at its rounded border (`overflow: hidden`, so the
+     block and its title share one corner radius), and a display equation sits
+     tight against the text above it. An outline drawn 2px out would be cut off
+     in the first case and would touch the line before it in the second. */
+  .prose pre:focus-visible,
+  .prose .katex-display:focus-visible {
+    outline-offset: -2px;
+  }
+
   ::selection {
     background-color: var(--color-accent-soft);
+  }
+
+  /* A reader who has asked their system for less motion gets none of the
+     site's own (spec §28). The demonstrations answer the same preference in
+     JavaScript, through `usePrefersReducedMotion`, because a paused animation
+     is not the same thing as a run applied in one step; everything else on the
+     site is a hover transition, and stopping those is a stylesheet's job. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
 

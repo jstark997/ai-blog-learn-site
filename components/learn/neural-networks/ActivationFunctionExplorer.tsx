@@ -72,7 +72,7 @@ export function ActivationFunctionExplorer({ className }: { className?: string }
               <label
                 key={option.id}
                 className={cn(
-                  "cursor-pointer rounded-md border border-rule px-3 py-1.5 text-sm font-medium",
+                  "cursor-pointer rounded-md border border-control px-3 py-1.5 text-sm font-medium",
                   "transition-colors hover:border-accent hover:text-accent",
                   "has-[:checked]:border-accent has-[:checked]:bg-accent-soft has-[:checked]:text-accent",
                   "has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2",

@@ -19,6 +19,8 @@ import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import type { ReactElement } from "react";
 
+import { rehypeScrollableMath } from "./rehype-scrollable-math";
+
 /**
  * The shape of an MDX component registry (spec §15). `proseComponents` and
  * `demoComponents` both satisfy it.
@@ -71,7 +73,13 @@ export async function renderMdx({
       blockDangerousJS: true,
       mdxOptions: {
         remarkPlugins: [remarkGfm, remarkMath],
-        rehypePlugins: [rehypeKatex, [rehypePrettyCode, prettyCodeOptions]],
+        // `rehypeScrollableMath` runs after `rehypeKatex`, on the markup it
+        // has just emitted (spec §28).
+        rehypePlugins: [
+          rehypeKatex,
+          rehypeScrollableMath,
+          [rehypePrettyCode, prettyCodeOptions],
+        ],
       },
     },
   });

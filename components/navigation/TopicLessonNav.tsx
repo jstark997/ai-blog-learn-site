@@ -83,7 +83,7 @@ export function TopicLessonNav({
         aria-controls={panelId}
         onClick={() => setIsOpen((open) => !open)}
         className={cn(
-          "flex w-full items-center justify-between gap-2 rounded-lg border border-rule px-3 py-2",
+          "flex w-full items-center justify-between gap-2 rounded-lg border border-control px-3 py-2",
           "text-sm font-medium text-ink transition-colors hover:border-accent lg:hidden",
         )}
       >

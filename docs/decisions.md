@@ -2171,3 +2171,94 @@ considered and rejected — it would pass on a layout that never rendered.
 change to either `#main` or the `id` fails the test. The visual and
 screen-reader questions these tests deliberately do not answer are phase 18's,
 where they belong to a human.
+
+## 2026-09-16 — A second border token for the things you can operate
+
+**Context:** The accessibility audit measured every colour pair the theme puts
+on screen. Text passes AA comfortably in both schemes — the worst case is
+`warning` on `warning-soft` at 5.10:1. `rule` does not: 1.35:1 against the
+canvas in light, 1.39:1 in dark. That is unremarkable for what `rule` mostly
+does — the line under the header, the divider between cards, a table's cell
+borders, all decorative under WCAG 1.4.11 — but `rule` was also drawing the
+boundary of five *controls*: the homepage's secondary call to action, the pager
+cards, the lesson-list disclosure button, the activation selector's segmented
+options, and the demo's secondary buttons. A control's boundary is what
+identifies it as a control, and 1.4.11 asks 3:1 of it.
+
+**Decision:** A second token, `--color-control`, at `oklch(60% 0.014 260)` in
+light and `oklch(55% 0.014 260)` in dark — 3.8:1 and 3.9:1 against the canvas,
+3.5:1 and 3.6:1 against the surface the demo panels sit on. `rule` keeps its
+value and its job: it separates. `control` outlines something you can press.
+
+**Alternatives:** darkening `rule` itself was rejected — every divider on the
+site would have grown heavier to fix five controls, and the restraint of the
+dividers is the reason the pages read as quietly as they do. Adding a second
+border width on controls instead of a second colour was rejected because 1.4.11
+is a contrast requirement, not a weight one.
+
+**Consequences:** `tests/contrast.test.ts` now parses the `@theme` block out of
+`app/globals.css` and measures every pair that matters — Oklch to sRGB to
+relative luminance — so a token edited to something unreadable fails the suite
+instead of shipping. It is the one accessibility criterion in spec §28 an agent
+can settle rather than self-certify, and it is settled. `rule` is deliberately
+absent from the 3:1 list, with the reasoning above recorded in the test.
+
+## 2026-09-16 — The two scroll boxes inside prose are keyboard-reachable
+
+**Context:** Spec §27 keeps long code lines and wide equations inside their own
+scrolling box rather than letting them widen the reading column. A box that
+scrolls and cannot be focused is content a keyboard alone cannot read (WCAG
+2.1.1), and only Chromium focuses scroll containers of its own accord.
+`MdxTable` already solved this for tables in phase 3. Code blocks turned out to
+be solved too — `rehype-pretty-code` writes `tabindex="0"` on the `<pre>` it
+emits — but their focus ring was invisible: the figure around a highlighted
+block is `overflow: hidden`, so a 2px *outward* outline was clipped away
+entirely. Display equations had no `tabindex` at all.
+
+**Decision:** Two small changes. `.prose pre:focus-visible` and
+`.prose .katex-display:focus-visible` draw their ring at `outline-offset: -2px`,
+inside their own box, where nothing can clip it. And a local rehype plugin,
+`lib/content/rehype-scrollable-math.ts`, adds `tabIndex` to every
+`span.katex-display` after `rehype-katex` has emitted it.
+
+**Alternatives:** a component override for the equation is not possible —
+`rehype-katex` writes that span deep inside its own markup and no entry in the
+prose registry can intercept it. Measuring overflow in the browser and adding
+the attribute only where a box really scrolls was rejected: it would ship
+JavaScript to article pages that currently ship none (spec §30), to remove a tab
+stop.
+
+Neither element gets a role or a label, unlike the table wrapper. There the
+focusable element is a `<div>` around the table and needs a name of its own;
+here the focusable element *is* the content, and its own text — the MathML for
+an equation, the code for a block — is what a screen reader announces on
+landing. A `role="group"` named "Equation" would put a word in front of every
+formula in a lesson.
+
+**Consequences:** a lesson with four code blocks and three equations has seven
+more tab stops than it did. That is the same trade `MdxTable` made and the same
+reasoning: a tab stop on a box that happens not to scroll is a smaller problem
+than content no keyboard can reach. The plugin declares the two hast fields it
+touches rather than depending on `@types/hast`, which is not a dependency of
+this project.
+
+## 2026-09-16 — Reduced motion is answered twice, in two places, for two reasons
+
+**Context:** `usePrefersReducedMotion` already existed, and the gradient descent
+demo uses it to apply a run in one step instead of animating eighty of them.
+Nothing answered the preference anywhere else, and the site transitions colour
+on every link, button and card, and rotates the lesson-list chevron.
+
+**Decision:** Keep the hook for the demos and add the conventional global guard
+to `app/globals.css`: under `prefers-reduced-motion: reduce`, transitions and
+animations everywhere collapse to 0.01ms.
+
+**Alternatives:** doing it all in CSS was rejected — the demo's animation is not
+a transition to shorten but a `setInterval` whose whole behaviour changes, and
+a run that steps invisibly fast is not what that reader asked for. Doing it all
+in JavaScript was rejected for the opposite reason: hover transitions are a
+stylesheet's business and need no client component.
+
+**Consequences:** `tests/reduced-motion.test.tsx` now covers both halves — the
+hook through the demo that acts on it, and the stylesheet rule, which nothing
+else in the suite would notice the loss of.
