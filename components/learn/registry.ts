@@ -4,29 +4,20 @@
  * article pages render with the prose registry alone, so no demo is ever in an
  * article's module graph.
  *
- * **Every entry must be wrapped in `next/dynamic`.** That is what keeps a demo's
- * JavaScript out of the lessons that do not use it: the registry is passed to
- * every lesson, but a lazily-imported component's chunk is only requested when
- * something actually renders it. An entry added as a direct import would load on
- * all of them and would contradict spec §30.
+ * **Every entry must come from `lazy-demos.ts`, never from a direct import.**
+ * That is what keeps a demo's JavaScript out of the lessons that do not use it:
+ * this registry is passed to every lesson, so a demo named here from anywhere
+ * else is code the whole route carries. Why the deferral lives in a separate
+ * `"use client"` module rather than in this one is explained there — calling
+ * `next/dynamic` in a Server Component defers nothing at the route level.
  *
- * `ssr: false` is not an option here — `next/dynamic` rejects it inside a Server
- * Component, and a demo should render its initial state into the HTML anyway.
  * The demos are Client Components; the `"use client"` directive belongs in each
- * demo file, not in this one.
- *
- * Each demo therefore needs a default export, which is what `import()` resolves
- * to here.
+ * demo file and in `lazy-demos.ts`, not in this one.
  */
-import dynamic from "next/dynamic";
-
+import { ActivationFunctionExplorer, GradientDescentDemo } from "@/components/learn/lazy-demos";
 import type { MdxComponents } from "@/lib/content/mdx";
 
 export const demoComponents = {
-  ActivationFunctionExplorer: dynamic(
-    () => import("@/components/learn/neural-networks/ActivationFunctionExplorer"),
-  ),
-  GradientDescentDemo: dynamic(
-    () => import("@/components/learn/neural-networks/GradientDescentDemo"),
-  ),
+  ActivationFunctionExplorer,
+  GradientDescentDemo,
 } satisfies MdxComponents;

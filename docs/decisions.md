@@ -2262,3 +2262,89 @@ stylesheet's business and need no client component.
 **Consequences:** `tests/reduced-motion.test.tsx` now covers both halves — the
 hook through the demo that acts on it, and the stylesheet rule, which nothing
 else in the suite would notice the loss of.
+
+## 2026-09-18 — `next/dynamic` is called behind `"use client"`, not in the registry
+
+**Context:** `components/learn/registry.ts` wrapped both demos in `next/dynamic`
+and documented that this kept a demo's JavaScript off the lessons that do not
+embed it. Measuring phase 19's first build showed it did not: every one of the
+six lesson pages fetched the same 31.7 kB script carrying both demos, including
+the four that embed no demo at all.
+
+The reason is that `next/dynamic` defers a chunk only within the module graph it
+is *called* in. Called in a Server Component it produces a client reference, and
+a route's client references are collected at build time from the route's module
+graph — not from what a particular page rendered. `/learn/[topic]/[lesson]` is
+one route, so a demo the registry named was a demo every lesson carried. Nothing
+in the suite noticed: the phase 10 test asserted `name: dynamic(` in the registry
+source, which was true and meant nothing.
+
+**Decision:** The two `dynamic()` calls move to `components/learn/lazy-demos.ts`,
+a `"use client"` module; the registry imports the results and names them. The
+deferral now happens inside the browser bundle, so each demo is an async chunk
+fetched when something renders it, and the route references only the two
+loaders. `ssr: false` stays unused — a demo still prerenders its initial state
+into the HTML, which is what the tests and `pnpm verify` read.
+
+**Alternatives:** passing each lesson only the demos its MDX names was rejected
+for the same reason the bug exists — the chunk set is fixed per route, so
+filtering at render time would have changed nothing. Splitting the lesson route
+was rejected as a large change to the content model for a bundling problem.
+
+**Consequences:** a lesson with no demo fetches 21.8 kB where it fetched 31.7 kB,
+and none of it is demo code; a lesson with a demo fetches that demo alone. The
+two tests that guard this now check both halves of the rule — that `lazy-demos.ts`
+is a client module wrapping every demo, and that the registry imports from
+nowhere else — because either half alone restores the leak silently.
+
+## 2026-09-18 — Bundle baseline, and the one leak left in it
+
+**Context:** Phase 19 asks for the production bundle size of an ordinary article
+page, recorded for later comparison. Next 16's build output no longer prints
+per-route sizes, so `scripts/bundle-report.mjs` (`pnpm report:bundle`) reads the
+prerendered HTML of the last build and measures what each page actually asks for.
+It reads pages rather than route manifests because the number that matters
+differs between two pages of the same route.
+
+**Decision:** The baseline, gzipped, for the build of 2026-09-18:
+
+| page | client JS | beyond the shared chunks |
+|---|---|---|
+| an ordinary article, `/blog/…` | **140.2 kB** | +5.4 kB |
+| an index — `/`, `/blog`, `/learn`, a topic | 134.7 kB | — |
+| a lesson with no demo | 142.3 kB | +7.6 kB |
+| a lesson with a demo | 145.0–145.8 kB | +10.3–11.0 kB |
+
+Shared by every page: 134.7 kB in 6 chunks — React, the Next runtime, the layout
+and its navigation. One stylesheet, 10.9 kB. Two preloaded fonts, 51.2 kB, already
+compressed. A further 38.5 kB of `nomodule` polyfills is excluded throughout: a
+browser that supports modules never fetches it.
+
+No client chunk contains KaTeX, Shiki, MDX, `gray-matter` or Zod — the
+completion criterion for this phase. Every route but the five client components
+is a Server Component, the build emits no warnings, and every dependency in
+`package.json` is imported by something.
+
+**Alternatives:** `next build --experimental-analyze` gives a richer report but
+nothing durable to check a later build against.
+
+**Consequences:** the 5.4 kB an article page carries beyond an index page is
+`next/image`'s runtime, reached from `Figure` in the prose registry, and it is
+there whether or not the article contains an image — the same route-graph
+mechanism as the demos above. Deferring it behind a `"use client"` module works
+and was measured: articles drop to 136.5 kB. It was not taken, because
+`next/dynamic` does not resolve outside Next's own bundler, so `Figure` renders
+as an empty `<figure>` under any renderer the test suite can use — synchronous or
+streamed — and the test that proves an editorial image gets `alt`, `sizes` and a
+`srcset` would have to be deleted or mocked into meaninglessness. Trading that
+for 3.7 kB on the article pages that happen to hold no image is a bad trade while
+no content holds one at all. It is worth revisiting if the site gains many
+image-free essays, and it is the first thing to reach for if this baseline is
+ever a problem.
+
+The KaTeX stylesheet is the other site-wide cost: 3.5 kB gzipped of the single
+10.9 kB stylesheet, loaded by `app/layout.tsx` on every page including the four
+that cannot contain mathematics. Splitting it per route is possible; it was left
+alone because it is render-blocking CSS whose second request would land on the
+pages that need it most, and because 3.5 kB does not justify the ordering risk
+against the `.prose .katex-display` rules in `app/globals.css`.
