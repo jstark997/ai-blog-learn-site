@@ -2348,3 +2348,35 @@ that cannot contain mathematics. Splitting it per route is possible; it was left
 alone because it is render-blocking CSS whose second request would land on the
 pages that need it most, and because 3.5 kB does not justify the ordering risk
 against the `.prose .katex-display` rules in `app/globals.css`.
+
+## 2026-09-18 — The README is the whole authoring manual, and it names a Node floor
+
+**Context:** Phase 20 asks for documentation good enough that someone who has
+never seen the repository can clone it, install it, run it, and add a post and a
+lesson from the repository alone. Two things had to be decided: where that
+material lives, and what versions it may assume.
+
+**Decision:** One `README.md` carries all of it — overview, prerequisites,
+installation, commands, structure, both authoring walkthroughs, the complete
+frontmatter reference, the MDX component reference, drafts, testing, publishing,
+deployment and the architecture rationale — rather than a README plus a
+`docs/authoring.md`. It states **Node 22.10 or newer** as the prerequisite,
+which is higher than the `>=20.9.0` Next itself declares.
+
+**Alternatives:** Splitting authoring into its own document under `docs/` was
+rejected because `docs/` is otherwise the authoritative-and-uneditable shelf —
+the spec and the plan — and an author reaching for how to write a post should
+not have to work out which documents there are advisory. Quoting Next's 20.9
+floor was rejected because it is wrong for this repository: `pnpm
+validate:content` imports `lib/content/schemas.ts` directly and needs type
+stripping, native from 23.6 and re-exec'd behind `--experimental-strip-types`
+below that, with `process.features.typescript` — the feature detection it
+branches on — arriving in 22.10. A reader on Node 21 would pass `pnpm build`
+and fail the content gate.
+
+**Consequences:** The README is long, and stays the single file to update when
+a field, a component or a command changes; the frontmatter and component tables
+in it duplicate `lib/content/schemas.ts` and `components/mdx/registry.ts`, and
+drift is caught by review rather than by a test. The deployment section
+describes `.github/workflows/ci.yml` as arriving with the deployment setup,
+which is true today and is Phase 21's to correct.
