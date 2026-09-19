@@ -17,6 +17,7 @@ import { renderMdx } from "@/lib/content/mdx";
  * Component and none of this ships to the browser.
  */
 const REGISTRY_SOURCE = new URL("../components/learn/registry.ts", import.meta.url);
+const LAZY_DEMOS_SOURCE = new URL("../components/learn/lazy-demos.ts", import.meta.url);
 
 /** Compiles MDX with the registry an article page uses. */
 async function article(source: string): Promise<string> {
@@ -182,17 +183,30 @@ describe("the demo registry", () => {
     expect(shared).toEqual([]);
   });
 
-  it("wraps every demo in next/dynamic", () => {
-    // The rule this phase exists to hold (spec §15, §30): a lazily-imported
-    // demo's JavaScript is fetched only by the lessons that render it. A loaded
-    // component cannot be told from an eager one by inspection, so the registry
-    // source is what is checked — which is also the line an agent adding a demo
-    // in phase 11 or 12 is most likely to get wrong.
-    const source = readFileSync(REGISTRY_SOURCE, "utf8");
-    const declarations = source.slice(source.indexOf("export const demoComponents"));
+  it("loads every demo through the lazy boundary", () => {
+    // The rule this phase exists to hold (spec §15, §30): a demo's JavaScript
+    // is fetched only by the lessons that render it. A route's client chunks
+    // are collected from its module graph rather than from what a page
+    // rendered, so `next/dynamic` has to be called behind `"use client"` —
+    // called in the registry, which is a Server Component module, it left both
+    // demos on every lesson page. A lazily-loaded component cannot be told
+    // from an eager one by inspection, so the two sources are what is checked.
+    const lazyDemos = readFileSync(LAZY_DEMOS_SOURCE, "utf8");
+
+    expect(lazyDemos.trimStart()).toMatch(/^"use client";/);
 
     for (const name of Object.keys(demoComponents)) {
-      expect(declarations).toMatch(new RegExp(`\\b${name}:\\s*dynamic\\(`));
+      expect(lazyDemos).toMatch(new RegExp(`\\b${name} = dynamic\\(`));
     }
+  });
+
+  it("imports its demos from nowhere but the lazy boundary", () => {
+    // The other half of the rule, and the line an agent adding a demo in a
+    // later phase is most likely to get wrong: one direct import here puts
+    // that demo back into every lesson's bundle, and nothing else would fail.
+    const registry = readFileSync(REGISTRY_SOURCE, "utf8");
+    const imported = [...registry.matchAll(/from "([^"]+)"/g)].map(([, from]) => from);
+
+    expect(imported).toEqual(["@/components/learn/lazy-demos", "@/lib/content/mdx"]);
   });
 });

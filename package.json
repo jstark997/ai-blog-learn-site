@@ -13,6 +13,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "verify": "node scripts/verify.mjs",
+    "report:bundle": "node scripts/bundle-report.mjs",
     "validate:content": "node scripts/validate-content.mjs",
     "prebuild": "pnpm validate:content"
   },
